@@ -9,15 +9,24 @@ const snap = {
   shifts: (db, id) => getShift(db, id),
   adjustments: (db, id) => db.get('SELECT * FROM adjustments WHERE id = ?', Number(id)) ?? null,
   settings: (db, key) => db.get('SELECT * FROM settings WHERE key = ?', key) ?? null,
+  roster: (db, id) => db.get('SELECT * FROM roster WHERE id = ?', Number(id)) ?? null,
+};
+
+// Upsert a whole row image by its own column names (stays correct as migrations add columns).
+const upsertRow = (db, table, row, key = 'id') => {
+  const cols = Object.keys(row);
+  db.run(`INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})
+    ON CONFLICT(${key}) DO UPDATE SET ${cols.filter(c => c !== key).map(c => `${c} = excluded.${c}`).join(', ')}`, cols.map(c => row[c]));
 };
 
 const restore = {
   employees(db, id, row){
     if(!row) return db.run('DELETE FROM employees WHERE id = ?', id);
-    db.run(`INSERT INTO employees (id, name, pin, rate1, rate2, active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET name = excluded.name, pin = excluded.pin, rate1 = excluded.rate1, rate2 = excluded.rate2,
-      active = excluded.active, created_at = excluded.created_at`,
-      [row.id, row.name, row.pin, row.rate1, row.rate2, row.active, row.created_at]);
+    upsertRow(db, 'employees', row);
+  },
+  roster(db, id, row){
+    if(!row) return db.run('DELETE FROM roster WHERE id = ?', Number(id));
+    upsertRow(db, 'roster', row);
   },
   shifts: (db, id, row) => row ? saveShift(db, row) : deleteShift(db, id),
   adjustments(db, id, row){
@@ -69,9 +78,11 @@ export function createUndo(db, clock = Date.now){
           if(top.entries.some(e => !same(snap[e.table](db, e.id), e.after))) throw conflict();
           // Removing an employee would hit rows this action never touched (shifts: RESTRICT, adjustments: CASCADE).
           const touchedAdj = new Set(top.entries.filter(e => e.table === 'adjustments').map(e => Number(e.id)));
+          const touchedRoster = new Set(top.entries.filter(e => e.table === 'roster').map(e => Number(e.id)));
           for(const e of top.entries.filter(x => x.table === 'employees' && !x.before)){
             if(db.get('SELECT 1 x FROM shifts WHERE emp_id = ? LIMIT 1', e.id)) throw conflict();
             if(db.all('SELECT id FROM adjustments WHERE emp_id = ?', e.id).some(a => !touchedAdj.has(a.id))) throw conflict();
+            if(db.all('SELECT id FROM roster WHERE emp_id = ?', e.id).some(r => !touchedRoster.has(r.id))) throw conflict();
           }
           // Shifts before employees on delete, employees before shifts on restore: reverse order handles both.
           for(const e of [...top.entries].reverse()) restore[e.table](db, e.id, e.before);

@@ -1,0 +1,19 @@
+{
+ "employees": [
+  {"id": 1, "name": "AKA", "role": ""},
+  {"id": 2, "name": "Him", "role": "Delivery Driver"},
+  {"id": 3, "name": "MISHILA", "role": "Training"}
+ ],
+ "shifts": {
+  "2026-10-25_1": [{"type": "shift", "category": "CAFE", "start": "09:00", "end": "17:00"}],
+  "2026-10-26_1": [{"type": "shift", "category": "CAFE", "start": "09:00", "end": "13:00"}, {"type": "shift", "category": "BAKERY", "start": "17:00", "end": "21:00"}],
+  "2026-10-27_1": [{"type": "OFF"}],
+  "2026-10-25_2": {"type": "shift", "category": "BAKERY", "start": "05:00", "end": "13:00"},
+  "2026-10-28_2": [{"type": "DELIVERY"}],
+  "2026-10-31_2": [{"type": "OFF"}],
+  "2026-10-25_3": [{"type": "TRAINING", "start": "10:00", "end": "14:00"}],
+  "2026-10-29_3": [{"type": "BAKE"}],
+  "2026-10-30_3": [{"type": "BAKERY YC"}],
+  "2026-10-26_3": [{"type": "shift", "category": "CAFE", "start": "25:00", "end": "17:00"}]
+ }
+}

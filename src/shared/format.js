@@ -25,6 +25,49 @@ export function startOfWeek(d){ d = new Date(d); d.setHours(0, 0, 0, 0); d.setDa
 export function addDays(d, n){ d = new Date(d); d.setDate(d.getDate() + n); return d; }
 export const niceStep = x => { const p = 10 ** Math.floor(Math.log10(x)), f = x / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; };
 
+// ----- Local wall-clock helpers (roster times are local "HH:MM" on a local "YYYY-MM-DD") -----
+export const atLocal = (day, hhmm) => {
+  const [y, m, d] = day.split('-').map(Number), [h, mi] = hhmm.split(':').map(Number);
+  return new Date(y, m - 1, d, h, mi).getTime();
+};
+export const addDaysYmd = (day, n) => { const [y, m, d] = day.split('-').map(Number); return ymd(new Date(y, m - 1, d + n)); };
+export const floorMin = ts => { const d = new Date(ts); d.setSeconds(0, 0); return d.getTime(); };
+const atMinuteOfDay = (ts, minutes) => { const d = new Date(ts); return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, minutes).getTime(); };
+const minuteOfDay = ts => { const d = new Date(ts); return d.getHours() * 60 + d.getMinutes(); };
+// Round up/down to the step on the local clock (:00/:15/:30/:45 for 15). Seconds are ignored.
+export const ceilStep = (ts, step) => atMinuteOfDay(ts, Math.ceil(minuteOfDay(ts) / step) * step);
+export const floorStep = (ts, step) => atMinuteOfDay(ts, Math.floor(minuteOfDay(ts) / step) * step);
+
+// Roster shorthand from the old roster app: "9.30" / "9.5" (= 9:50) with AM/PM, plus "17:00" or "7:05" PM.
+export function parseShortTime(str, meridiem){
+  str = String(str ?? '').trim();
+  if(!str) return null;
+  const m = /^(\d{1,2})(?:([.:])(\d{1,2}))?$/.exec(str);
+  if(!m) return null;
+  let hour = Number(m[1]);
+  const min = m[3] == null ? 0 : Number(m[2] === '.' && m[3].length === 1 ? m[3] + '0' : m[3]);
+  if(m[2] === ':' && m[3].length !== 2) return null;
+  if(min > 59) return null;
+  if(meridiem === 'AM' || meridiem === 'PM'){
+    if(hour < 1 || hour > 12) return null;
+    if(meridiem === 'PM' && hour !== 12) hour += 12;
+    if(meridiem === 'AM' && hour === 12) hour = 0;
+  } else if(hour > 23) return null;
+  return `${pad(hour)}:${pad(min)}`;
+}
+// "09:00" → "9A", "17:30" → "5:30P" (compact roster labels)
+export const fmt12 = hhmm => {
+  if(!hhmm) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  return `${h % 12 || 12}${m ? ':' + pad(m) : ''}${h < 12 ? 'A' : 'P'}`;
+};
+
+// Compact roster chip labels, same as the old roster app ("9A–5P", "Bakery 5A–1P", "TRN …", "OFF").
+export function rosterLabel(e){
+  const span = e.start ? `${fmt12(e.start)}–${fmt12(e.end)}` : '';
+  return { CAFE: span, BAKERY: `Bakery ${span}`, TRAINING: `TRN ${span}`, DELIVERY: 'DEL', BAKE: 'BAKE', 'BAKERY YC': 'BKY YC', OFF: 'OFF' }[e.type] ?? e.type;
+}
+
 // Prefix text that a spreadsheet would treat as a formula; numbers like "-5" are left alone.
 export const safeText = v => { v = String(v ?? ''); return /^[=+\-@]/.test(v) && !/^-?\d/.test(v) ? "'" + v : v; };
 export const csvCell = v => `"${safeText(v).replace(/"/g, '""')}"`;

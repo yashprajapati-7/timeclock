@@ -64,3 +64,29 @@ test('isolation: admin endpoints need a session', async () => {
   for(const p of ['/api/admin/state', '/api/admin/audit', '/api/admin/backup', '/api/admin/export/payroll.xlsx'])
     assert.equal((await request(app).get(p)).status, 401, p);
 });
+
+test('kiosk shows only today\'s roster for that employee and prices punches with rounding', async () => {
+  const { makeTestApp: mk, loginAgent: login, d: dd, fakeClock } = await import('./helpers.js');
+  const clock = fakeClock(dd(2026, 10, 30, 9, 8));
+  const { app, db } = await mk({ clock });
+  const a = await login(app);
+  const bob = (await a.post('/api/admin/employees').send({ name: 'Bob', pin: '2222', rate1: 20 })).body.id;
+  const ann = (await a.post('/api/admin/employees').send({ name: 'Ann', pin: '3333', rate1: 20 })).body.id;
+  await a.put('/api/admin/settings').send({ roundFrom: '2026-10-26' });
+  await a.put(`/api/admin/roster/${bob}/2026-10-30`).send({ entries: [{ type: 'CAFE', start: '09:00', end: '17:00' }] });
+  await a.put(`/api/admin/roster/${ann}/2026-10-30`).send({ entries: [{ type: 'BAKERY', start: '05:00', end: '13:00' }] });
+  const who = (await request(app).post('/api/kiosk/identify').send({ pin: '2222' })).body;
+  assert.deepEqual(who.roster, [{ type: 'CAFE', start: '09:00', end: '17:00' }]);
+  assert.ok(!JSON.stringify(who).includes('BAKERY'));
+  const inRes = (await request(app).post('/api/kiosk/punch').send({ pin: '2222', type: 'in' })).body;
+  assert.equal(inRes.calc.paidIn, dd(2026, 10, 30, 9, 15));
+  assert.equal(inRes.calc.lateMin, 8);
+  clock.t = dd(2026, 10, 30, 17, 20);
+  const out = (await request(app).post('/api/kiosk/punch').send({ pin: '2222', type: 'out' })).body;
+  assert.equal(out.calc.paid, 6.75);
+  assert.equal(out.calc.paidOut, dd(2026, 10, 30, 17));
+  const after = (await request(app).post('/api/kiosk/identify').send({ pin: '2222' })).body;
+  assert.equal(after.todayPaid, 6.75);
+  assert.equal(after.weekPaid, 6.75);
+  void db;
+});

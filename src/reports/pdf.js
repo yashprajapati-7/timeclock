@@ -2,7 +2,8 @@
 import PDFDocument from 'pdfkit';
 import { createRequire } from 'node:module';
 import { HttpError } from '../errors.js';
-import { DAYS, fmtHM, fmtMin, hm, money } from '../shared/format.js';
+import { DAYS, fmtHM, fmtMin, hm, money, rosterLabel } from '../shared/format.js';
+export { rosterLabel };
 
 const require = createRequire(import.meta.url);
 // DejaVu Sans Mono covers ₹ € £, which the built-in PDF fonts (WinAnsi) do not.
@@ -84,6 +85,34 @@ function table(doc, columns, rows, { fontSize = 7, bold = new Set() } = {}){
   doc.y = y + 6;
 }
 
+// ----- Text content (pure, so tests can check it without parsing the PDF) -----
+export function payrollLine(r, report){
+  const M = n => money(n, report.currency);
+  return [r.name, ...r.days.map(h => h ? fmtHM(h) : '–'), fmtHM(r.total), fmtMin(r.ded), fmtHM(r.paid),
+    r.h1.toFixed(2), M(r.r1), r.h2.toFixed(2), M(r.r2), r.salary == null ? '' : M(r.salary), M(r.allow), M(r.deduct), M(r.net)];
+}
+export function payslipSummary(r, report){
+  const M = n => money(n, report.currency), tier = report.tierHours;
+  const signed = (type, amount) => (type === 'allowance' ? '' : '-') + M(Number(amount));
+  return [
+    ['Paid hours', `${fmtHM(r.paid)} (${r.paid.toFixed(2)}h)${r.late ? ` · late ${r.late}×` : ''}`],
+    ...(r.payType === 'salary'
+      ? [['Weekly salary', M(r.salary ?? 0)]]
+      : [[`First ${tier}h`, `${r.h1.toFixed(2)}h × ${M(r.r1)} = ${M(r.p1)}`], [`After ${tier}h`, `${r.h2.toFixed(2)}h × ${M(r.r2)} = ${M(r.p2)}`]]),
+    ['Gross pay', M(r.gross)],
+    ...(r.fixed || []).map(f => [`${f.type === 'allowance' ? '+' : '−'} ${f.label} (fixed)`, signed(f.type, f.amount)]),
+    ...r.adjustments.map(a => [`${a.type === 'allowance' ? '+' : '−'} ${a.label}`, signed(a.type, a.amount)]),
+  ];
+}
+export function timesheetRow(s){
+  const c = s.calc, rounded = c.paidIn !== s.in || c.paidOut !== (s.out ?? c.paidOut);
+  const tags = [c.lateMin > 0 && c.paidIn > s.in ? 'LATE' : '', c.capped ? `OVER ${c.capped}m` : '', c.earlyMin ? 'EARLY' : ''].filter(Boolean).join(' ');
+  return [s.date, hm(s.in), s.out ? hm(s.out) + (new Date(s.out).getDate() !== new Date(s.in).getDate() ? ' +1d' : '') : 'OPEN',
+    rounded || tags ? `${hm(c.paidIn)}–${hm(c.paidOut)}${tags ? ' ' + tags : ''}` : '—',
+    s.breaks.map(b => `${hm(b.start)}–${b.end ? hm(b.end) : '…'}`).join(', ') || '—',
+    fmtHM(c.total), fmtMin(c.ded), fmtHM(c.paid)];
+}
+
 export function payrollPdf(report, opts = {}){
   const doc = newDoc(`Weekly payroll ${report.weekStart}`, { ...opts, layout: 'landscape' });
   header(doc, report, 'Weekly payroll');
@@ -93,13 +122,12 @@ export function payrollPdf(report, opts = {}){
     { label: 'Worked', width: 36, align: R }, { label: 'Break', width: 36, align: R }, { label: 'Paid', width: 36, align: R },
     { label: `≤${tier}h`, width: 36, align: R }, { label: 'Rate 1', width: 40, align: R },
     { label: `>${tier}h`, width: 36, align: R }, { label: 'Rate 2', width: 40, align: R },
-    { label: 'Gross', width: 50, align: R }, { label: '+Allow', width: 44, align: R }, { label: '-Deduct', width: 44, align: R },
+    { label: 'Salary', width: 50, align: R }, { label: '+Allow', width: 44, align: R }, { label: '-Deduct', width: 44, align: R },
     { label: 'Net pay', width: 54, align: R },
   ];
-  const line = (name, r) => [name, ...r.days.map(h => h ? fmtHM(h) : '–'), fmtHM(r.total), fmtMin(r.ded), fmtHM(r.paid),
-    r.h1.toFixed(2), M(r.r1), r.h2.toFixed(2), M(r.r2), M(r.gross), M(r.allow), M(r.deduct), M(r.net)];
-  const rows = report.rows.map(r => line(r.name, r));
-  rows.push(line('TOTAL', { ...report.totals, r1: null, r2: null }));
+  const rows = report.rows.map(r => payrollLine(r, report));
+  const salary = report.rows.reduce((a, r) => a + (r.salary ?? 0), 0);
+  rows.push(payrollLine({ ...report.totals, name: 'TOTAL', r1: 0, r2: 0, salary }, report));
   table(doc, columns, rows, { bold: new Set([rows.length - 1]) });
   doc.font('Mono').fontSize(7).fillColor('#555')
     .text(`Paid hours = worked − break deducted. Rate 1 applies to the first ${tier} paid hours of the week, Rate 2 after that.`);
@@ -115,22 +143,14 @@ export function payslipsPdf(report, empIds = 'all', opts = {}){
   rows.forEach((r, i) => {
     if(i) doc.addPage();
     header(doc, report, 'Timesheet & payslip', r.name);
-    const summary = [
-      ['Paid hours', `${fmtHM(r.paid)} (${r.paid.toFixed(2)}h)`],
-      [`First ${report.tierHours}h`, `${r.h1.toFixed(2)}h × ${M(r.r1)} = ${M(r.p1)}`],
-      [`After ${report.tierHours}h`, `${r.h2.toFixed(2)}h × ${M(r.r2)} = ${M(r.p2)}`],
-      ['Gross', M(r.gross)],
-      ...r.adjustments.map(a => [a.type === 'allowance' ? `+ ${a.label}` : `− ${a.label}`, (a.type === 'allowance' ? '' : '-') + M(Number(a.amount))]),
-    ];
+    const summary = payslipSummary(r, report);
     table(doc, [{ label: 'Pay summary', width: 260 }, { label: '', width: 200, align: R }], [...summary, ['NET PAY', M(r.net)]],
       { fontSize: 9, bold: new Set([summary.length]) });
     doc.moveDown(0.5);
     table(doc, [
-      { label: 'Date', width: 80 }, { label: 'In', width: 50 }, { label: 'Out', width: 60 }, { label: 'Breaks', width: 140 },
-      { label: 'Worked', width: 60, align: R }, { label: 'Deducted', width: 60, align: R }, { label: 'Paid', width: 60, align: R },
-    ], r.shifts.map(s => [s.date, hm(s.in), s.out ? hm(s.out) + (new Date(s.out).getDate() !== new Date(s.in).getDate() ? ' +1d' : '') : 'OPEN',
-      s.breaks.map(b => `${hm(b.start)}–${b.end ? hm(b.end) : '…'}`).join(', ') || '—',
-      fmtHM(s.calc.total), fmtMin(s.calc.ded), fmtHM(s.calc.paid)]), { fontSize: 8 });
+      { label: 'Date', width: 64 }, { label: 'In', width: 38 }, { label: 'Out', width: 50 }, { label: 'Paid time', width: 110 },
+      { label: 'Breaks', width: 84 }, { label: 'Worked', width: 50, align: R }, { label: 'Deducted', width: 54, align: R }, { label: 'Paid', width: 50, align: R },
+    ], r.shifts.map(timesheetRow), { fontSize: 8 });
     doc.moveDown(3);
     const y = doc.y;
     doc.moveTo(x, y).lineTo(x + 200, y).lineWidth(0.8).stroke();
@@ -138,5 +158,52 @@ export function payslipsPdf(report, empIds = 'all', opts = {}){
     doc.font('Mono').fontSize(8).text('Employee signature', x, y + 4);
     doc.text('Manager signature', x + 280, y + 4);
   });
+  return finish(doc);
+}
+
+// ----- Roster week (A4 landscape grid, colour-coded like the old roster app) -----
+const ROSTER_COLORS = {
+  CAFE: ['#EFF8F3', '#1A5C36'], BAKERY: ['#FCE7F3', '#9D174D'], 'BAKERY YC': ['#FCE7F3', '#9D174D'],
+  TRAINING: ['#EDE9FE', '#5B21B6'], DELIVERY: ['#FFF3E0', '#B45309'], BAKE: ['#FEF9EE', '#92400E'], OFF: ['#E8E8E8', '#555555'],
+};
+
+export function rosterPdf(model, opts = {}){
+  const doc = newDoc(`Roster ${model.weekStart}`, { ...opts, layout: 'landscape' });
+  header(doc, { ...model, weekStart: model.weekStart, weekEnd: model.weekEnd }, 'Roster');
+  const x0 = doc.page.margins.left, nameW = 110, hoursW = 50;
+  const dayW = (doc.page.width - x0 * 2 - nameW - hoursW) / 7, headH = 22, bottom = () => doc.page.height - doc.page.margins.bottom;
+  const drawHead = y => {
+    doc.rect(x0, y, nameW + dayW * 7 + hoursW, headH).fill('#000');
+    doc.font('Mono-Bold').fontSize(8).fillColor('#fff').text('STAFF', x0 + 4, y + 7, { width: nameW - 8, lineBreak: false });
+    model.days.forEach((dd, i) => doc.text(`${DAYS[i]} ${dd.slice(8)}/${dd.slice(5, 7)}`, x0 + nameW + dayW * i, y + 7, { width: dayW, align: 'center', lineBreak: false }));
+    doc.text('HRS', x0 + nameW + dayW * 7, y + 7, { width: hoursW - 4, align: 'right', lineBreak: false });
+    doc.fillColor('#000');
+    return y + headH;
+  };
+  let y = drawHead(doc.y);
+  for(const r of model.rows){
+    const lines = Math.max(1, ...r.cells.map(c => c.length));
+    const rowH = 8 + lines * 11;
+    if(y + rowH > bottom()){ doc.addPage(); y = drawHead(doc.page.margins.top); }
+    doc.font('Mono-Bold').fontSize(8).fillColor('#000').text(r.name, x0 + 4, y + 5, { width: nameW - 8, lineBreak: false, ellipsis: true });
+    r.cells.forEach((entries, i) => {
+      const cx = x0 + nameW + dayW * i;
+      entries.forEach((e, j) => {
+        const [bg, fg] = ROSTER_COLORS[e.type] ?? ['#F5F5F5', '#333333'];
+        const ey = y + 3 + j * 11;
+        doc.rect(cx + 2, ey, dayW - 4, 10).fill(bg);
+        doc.save().rect(cx + 2, ey, dayW - 4, 10).clip();
+        doc.font('Mono-Bold').fontSize(7).fillColor(fg).text(rosterLabel(e), cx + 3, ey + 2, { width: dayW - 6, align: 'center', lineBreak: false });
+        doc.restore();
+      });
+    });
+    doc.font('Mono').fontSize(8).fillColor('#000').text(r.total ? r.total.toFixed(1) : '–', x0 + nameW + dayW * 7, y + 5, { width: hoursW - 4, align: 'right', lineBreak: false });
+    doc.moveTo(x0, y + rowH).lineTo(x0 + nameW + dayW * 7 + hoursW, y + rowH).lineWidth(0.4).strokeColor('#000').stroke();
+    y += rowH;
+  }
+  if(y + 16 > bottom()){ doc.addPage(); y = doc.page.margins.top; }
+  doc.font('Mono-Bold').fontSize(8).fillColor('#000').text('STAFF ON', x0 + 4, y + 5, { width: nameW, lineBreak: false });
+  model.staffPerDay.forEach((n, i) => doc.text(String(n), x0 + nameW + dayW * i, y + 5, { width: dayW, align: 'center', lineBreak: false }));
+  doc.text(model.total.toFixed(1), x0 + nameW + dayW * 7, y + 5, { width: hoursW - 4, align: 'right', lineBreak: false });
   return finish(doc);
 }

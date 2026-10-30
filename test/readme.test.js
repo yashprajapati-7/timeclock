@@ -11,3 +11,10 @@ test('README covers setup, migration, data safety and operations', () => {
     assert.ok(md.toLowerCase().includes(s.toLowerCase()), `README should mention: ${s}`);
   assert.doesNotMatch(md, /export (your backup )?from `?legacy\//i);
 });
+
+test('README documents roster, rounding, Brevo email and timezone', () => {
+  const md = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+  for(const s of ['BREVO_API_KEY', 'MAIL_FROM', 'Authorised IPs', 'TZ=Australia/Sydney', 'ROSTER_IMPORT_URL', '±6', 'Rounding starts', 'Fair Work', 'Import old roster'])
+    assert.ok(md.includes(s), `README should mention: ${s}`);
+  assert.ok(!md.includes('SMTP_HOST'));
+});

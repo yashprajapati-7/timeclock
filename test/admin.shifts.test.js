@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { d, makeTestApp, loginAgent } from './helpers.js';
+import { calcAll } from '../src/shared/pay.js';
 
 const t = (h, m = 0) => d(2026, 10, 27, h, m);
 
@@ -33,4 +34,18 @@ test('shifts, force clock-out, adjustments', async () => {
   assert.equal((await a.get('/api/admin/state')).body.adj[`2026-10-26|${emp}`], undefined);
   assert.equal((await a.delete(`/api/admin/shifts/${open}`).type('json')).status, 200);
   assert.equal((await a.get('/api/admin/state')).body.shifts.length, 1);
+});
+
+test('approving overtime pays to the actual finish (rounded down)', async () => {
+  const { app, db } = await makeTestApp();
+  const a = await loginAgent(app);
+  const emp = (await a.post('/api/admin/employees').send({ name: 'Ann', pin: '1111', rate1: 20 })).body.id;
+  await a.put('/api/admin/settings').send({ roundFrom: '2026-10-26' });
+  db.run("INSERT INTO roster (emp_id, day, type, start_hm, end_hm, position) VALUES (?, '2026-10-27', 'CAFE', '09:00', '17:00', 0)", emp);
+  const id = (await a.post('/api/admin/shifts').send({ empId: emp, in: t(9), out: t(17, 30), breaks: [] })).body.id;
+  const paidOut = async () => calcAll((await a.get('/api/admin/state')).body, Date.now()).get(id).paidOut;
+  assert.equal(await paidOut(), t(17));
+  assert.equal((await a.put(`/api/admin/shifts/${id}`).send({ empId: emp, in: t(9), out: t(17, 30), breaks: [], otApproved: true })).status, 200);
+  assert.equal(await paidOut(), t(17, 30));
+  assert.equal((await a.get('/api/admin/state')).body.shifts[0].otApproved, true);
 });

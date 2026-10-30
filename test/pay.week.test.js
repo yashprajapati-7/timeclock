@@ -68,3 +68,58 @@ test('open shift uses now', () => {
   assert.equal(r.open, true);
   assert.equal(r.total, 3);
 });
+
+const rosterAll = (start, end) => Object.fromEntries([0, 1, 2, 3, 4].map(i => [`2026-10-${26 + i}|e1`, [{ type: 'CAFE', start, end }]]));
+
+test('week uses rounded paid hours and counts late starts', () => {
+  const data = tierFixture();
+  data.settings = { ...data.settings, rounding: true, roundGraceMin: 6, roundStepMin: 15, roundFrom: '2026-10-26' };
+  data.roster = rosterAll('09:00', '15:00');
+  data.shifts[0].in = d(2026,10,26,9,10);
+  const [r] = week(data, ws);
+  assert.equal(r.paid, 27.25);
+  assert.equal(r.late, 1);
+  assert.equal(r.lateMin, 10);
+});
+
+test('a week before roundFrom is identical to having no roster', () => {
+  const base = tierFixture();
+  base.shifts[0].in = d(2026,10,26,9,10);
+  const withRoster = { ...base, roster: rosterAll('09:00', '15:00'), settings: { ...base.settings, rounding: true, roundGraceMin: 6, roundStepMin: 15, roundFrom: '2026-11-02' } };
+  const strip = rows => rows.map(({ e, shifts, ...r }) => r);
+  assert.deepEqual(strip(week(withRoster, ws)), strip(week(base, ws)));
+});
+
+test('salary pays the fixed weekly amount regardless of hours', () => {
+  const data = { settings, adj: {}, employees: [emp('s1', { payType: 'salary', weeklySalary: 800 })],
+    shifts: [sh('x', 's1', d(2026,10,27,9), d(2026,10,27,12))] };
+  const [r] = week(data, ws);
+  assert.deepEqual([r.p1, r.p2, r.gross, r.net, r.paid, r.salary], [0, 0, 800, 800, 3, 800]);
+});
+
+test('salary is not paid before the start date; hourly rows have salary null', () => {
+  const data = { settings, adj: {}, shifts: [],
+    employees: [emp('s1', { payType: 'salary', weeklySalary: 800, startDate: '2026-11-03' }), emp('h1')] };
+  const rows = week(data, ws);
+  assert.equal(rows.find(r => r.e.id === 's1').gross, 0);
+  assert.equal(rows.find(r => r.e.id === 'h1').salary, null);
+  assert.equal(week(data, new Date(d(2026,11,2))).find(r => r.e.id === 's1').gross, 800);
+});
+
+test('fixed items apply within their weeks and only when there is pay', () => {
+  const items = [{ type: 'allowance', label: 'Phone', amount: 10, from: '2026-10-26', to: null },
+    { type: 'deduction', label: 'Uniform', amount: 4, from: '2026-10-19', to: '2026-10-19' }];
+  const data = tierFixture();
+  data.employees[0].fixedItems = items;
+  const [r] = week(data, ws);
+  assert.equal(r.allow, 10);
+  assert.equal(r.deduct, 0);
+  assert.equal(r.net, r.gross + 10);
+  assert.deepEqual(r.fixed.map(f => f.label), ['Phone']);
+  const before = week(data, new Date(d(2026,10,19)));       // no shifts that week → no pay → no fixed items
+  assert.equal(before[0].allow, 0);
+  data.adj['2026-10-26|e1'] = [{ type: 'allowance', label: 'Travel', amount: 5 }];
+  assert.equal(week(data, ws)[0].allow, 15);
+  const sal = { settings, adj: {}, shifts: [], employees: [emp('s1', { payType: 'salary', weeklySalary: 500, fixedItems: items })] };
+  assert.equal(week(sal, ws)[0].net, 510);                   // salaried: fixed items apply even with no hours
+});

@@ -39,11 +39,14 @@ export function openDb(file){
   return db;
 }
 
-export function migrate(db){
+export const pendingMigrations = (db, list = migrations) => Math.max(0, list.length - db.get('PRAGMA user_version').user_version);
+
+// Each migration runs in its own transaction (db.tx rolls back on any failing statement).
+export function migrate(db, list = migrations){
   const current = db.get('PRAGMA user_version').user_version;
-  for(let v = current; v < migrations.length; v++){
+  for(let v = current; v < list.length; v++){
     db.tx(() => {
-      db.exec(migrations[v]);
+      db.exec(list[v]);
       db.exec(`PRAGMA user_version = ${v + 1}`);
     });
   }

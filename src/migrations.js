@@ -18,4 +18,23 @@ export const migrations = [
   CREATE INDEX audit_ts ON audit(ts DESC);
   CREATE TABLE sessions (token_hash TEXT PRIMARY KEY, created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL);
   `,
+  // 2: roster, richer employees (pay type, contact, dates, recurring items), overtime approval. Additive only.
+  `
+  ALTER TABLE employees ADD COLUMN role TEXT NOT NULL DEFAULT '';
+  ALTER TABLE employees ADD COLUMN pay_type TEXT NOT NULL DEFAULT 'hourly' CHECK(pay_type IN ('hourly','salary'));
+  ALTER TABLE employees ADD COLUMN weekly_salary REAL;
+  ALTER TABLE employees ADD COLUMN email TEXT NOT NULL DEFAULT '';
+  ALTER TABLE employees ADD COLUMN phone TEXT NOT NULL DEFAULT '';
+  ALTER TABLE employees ADD COLUMN birthday TEXT;
+  ALTER TABLE employees ADD COLUMN start_date TEXT;
+  ALTER TABLE employees ADD COLUMN fixed_items TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE shifts ADD COLUMN ot_ok INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE roster (id INTEGER PRIMARY KEY,
+    emp_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    day TEXT NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('CAFE','BAKERY','TRAINING','OFF','DELIVERY','BAKE','BAKERY YC')),
+    start_hm TEXT, end_hm TEXT, position INTEGER NOT NULL,
+    CHECK((type IN ('CAFE','BAKERY','TRAINING')) = (start_hm IS NOT NULL AND end_hm IS NOT NULL)));
+  CREATE INDEX roster_day_emp ON roster(day, emp_id);
+  `,
 ];

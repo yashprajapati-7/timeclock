@@ -4,7 +4,7 @@ import ExcelJS from 'exceljs';
 import { DAYS, hm } from '../shared/format.js';
 
 export const PAYROLL_HEADER = tier => ['Employee', ...DAYS.map(d => `${d} paid hrs`), 'Worked hrs', 'Break deducted hrs', 'Paid hrs',
-  `Hrs first ${tier}`, 'Rate 1', `Hrs after ${tier}`, 'Rate 2', 'Gross', 'Allowances', 'Deductions', 'Net pay'];
+  `Hrs first ${tier}`, 'Rate 1', `Hrs after ${tier}`, 'Rate 2', 'Salary', 'Allowances', 'Deductions', 'Net pay'];
 
 const HOURS = '0.00';
 const moneyFmt = sym => { const s = `"${String(sym).replace(/"/g, '')}"`; return `${s}#,##0.00;-${s}#,##0.00`; };
@@ -31,9 +31,10 @@ function payrollSheet(wb, report){
     if(i > 0) col.numFmt = kinds[i - 1] === 'h' ? HOURS : money;
   });
   for(const r of report.rows)
-    ws.addRow([r.name, ...r.days, r.total, r.ded / 60, r.paid, r.h1, r.r1, r.h2, r.r2, r.gross, r.allow, r.deduct, r.net]);
+    ws.addRow([r.name, ...r.days, r.total, r.ded / 60, r.paid, r.h1, r.r1, r.h2, r.r2, r.salary, r.allow, r.deduct, r.net]);
   const first = 3, last = 2 + report.rows.length, T = report.totals;
-  const cached = [...T.days, T.total, T.ded / 60, T.paid, T.h1, null, T.h2, null, T.gross, T.allow, T.deduct, T.net];
+  const salaryTotal = report.rows.reduce((a, r) => a + (r.salary ?? 0), 0);
+  const cached = [...T.days, T.total, T.ded / 60, T.paid, T.h1, null, T.h2, null, salaryTotal, T.allow, T.deduct, T.net];
   const total = ws.addRow(['TOTAL', ...cached.map((result, i) => {
     if(result == null || !report.rows.length) return result ?? null;
     const L = ws.getColumn(i + 2).letter;
@@ -51,13 +52,16 @@ function shiftsSheet(wb, report){
     { header: 'Breaks', width: 26 }, { header: 'Worked hrs', width: 11, style: { numFmt: HOURS } },
     { header: 'Break taken min', width: 14 }, { header: 'Break by rule min', width: 15 }, { header: 'Deducted min', width: 13 },
     { header: 'Paid hrs', width: 10, style: { numFmt: HOURS } },
+    { header: 'Rostered', width: 18 }, { header: 'Paid in', width: 9 }, { header: 'Paid out', width: 9 },
+    { header: 'Late min', width: 9 }, { header: 'Over min (unpaid)', width: 16 },
   ];
   headerStyle(ws.getRow(1));
   for(const s of report.shiftsAll)
     ws.addRow([s.name, s.date, hm(s.in), s.out ? hm(s.out) : 'OPEN',
       s.breaks.map(b => `${hm(b.start)}–${b.end ? hm(b.end) : '…'}`).join('; '),
-      s.calc.total, s.calc.actual, s.calc.policy, s.calc.ded, s.calc.paid]);
-  ws.autoFilter = { from: 'A1', to: 'J1' };
+      s.calc.total, s.calc.actual, s.calc.policy, s.calc.ded, s.calc.paid,
+      s.rosterLabel, hm(s.calc.paidIn), hm(s.calc.paidOut), s.calc.lateMin, s.calc.capped]);
+  ws.autoFilter = { from: 'A1', to: 'O1' };
 }
 
 function adjustmentsSheet(wb, report){
@@ -65,7 +69,10 @@ function adjustmentsSheet(wb, report){
   ws.columns = [{ header: 'Employee', width: 24 }, { header: 'Type', width: 12 }, { header: 'Description', width: 30 },
     { header: 'Amount', width: 12, style: { numFmt: moneyFmt(report.currency) } }];
   headerStyle(ws.getRow(1));
-  for(const r of report.rows) for(const a of r.adjustments) ws.addRow([r.name, a.type, a.label, Number(a.amount)]);
+  for(const r of report.rows){
+    for(const a of r.adjustments) ws.addRow([r.name, a.type, a.label, Number(a.amount)]);
+    for(const f of r.fixed || []) ws.addRow([r.name, `${f.type} (fixed)`, f.label, Number(f.amount)]);
+  }
 }
 
 export async function payrollWorkbook(report){

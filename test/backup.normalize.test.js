@@ -28,3 +28,12 @@ test('invalid backups throw', () => {
   const pin = fixture('backup-v2'); pin.employees[0].pin = '12';
   assert.throws(() => normalizeBackup(pin), /pin/i);
 });
+
+test('rejects roster entries for unknown employees or with bad times', () => {
+  const ghost = { ...fixture('backup-v2'), v: 3, roster: { '2026-10-27|ghost': [{ type: 'OFF' }] } };
+  assert.throws(() => normalizeBackup(ghost), /roster/);
+  const badTime = { ...fixture('backup-v2'), v: 3, roster: { '2026-10-27|e1': [{ type: 'CAFE', start: '9', end: '17' }] } };
+  assert.throws(() => normalizeBackup(badTime), /roster/);
+  const badEmp = fixture('backup-v2'); badEmp.v = 3; badEmp.employees[0].email = 'nope@';
+  assert.throws(() => normalizeBackup(badEmp), /Email/);
+});

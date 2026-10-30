@@ -47,6 +47,36 @@ Both old backup formats (v1 and v2) are accepted.
 
 You can also download a portable JSON backup any time from Admin → Settings → Download backup.
 
+## Roster and pay rounding
+
+The **Roster** tab is the weekly staff × day grid (Cafe, Bakery, Training, Delivery, Bake, Bakery YC, Off). Tap a day to add shifts (type `9.30` + AM/PM, or `17:00`), use the presets, copy a week forward, clear a week, or download the **Roster PDF**.
+
+**Import old roster** copies everything from the old GJ06 roster app (or an exported JSON file). It always shows a preview first: the date range, matched staff, new staff (they get a random kiosk code, shown once), and how many already-worked shifts would be re-priced. The old app saved every day one day early (a UTC bug), so the import moves dates **+1 day** by default; you can change that in the preview. Re-running the import is safe — it remembers which old staff member is which employee and changes nothing that is already the same.
+
+When **Rounding starts** (Settings → Pay rules) is set to a Monday, paid times follow the roster from that week on:
+
+- Clock-in or clock-out within **±6 minutes** of the rostered time → paid from/to the rostered time.
+- Late start → rounded **up** to the next quarter hour (9:08 → 9:15). Tagged **LATE**.
+- Early start → paid from the rostered start.
+- Leaving early → rounded **down** to the quarter hour. Tagged **EARLY**.
+- Staying past the rostered finish → paid to the rostered finish unless an admin ticks **Approve overtime** on the shift. Tagged **OVER** and shown on the dashboard.
+- No roster that day → actual times.
+
+Raw clock times are never changed: the Shifts page always shows actual and paid times side by side, and earlier weeks are never re-priced. **Note:** most of these rules favour the employer. Check them against your award / Fair Work obligations before relying on them; you can switch rounding off at any time.
+
+## Employees, payslips and reminders
+
+Employees can be paid **hourly** (Rate 1 for the first N hours a week, Rate 2 after) or a **fixed weekly salary**. Each can have an email, phone, birthday, start date and **fixed weekly allowances/deductions** that apply automatically every week they are paid. The dashboard shows birthdays and work anniversaries coming up in the next 7 days.
+
+**Emailing payslips** uses [Brevo](https://www.brevo.com) (free plan ≈300 emails/day), because Railway's Hobby plan blocks normal email (SMTP):
+
+1. Create a free Brevo account and add your sender address under *Senders & IPs* (verify it).
+2. Create an API key (*SMTP & API → API keys*). Under *Security → Authorised IPs*, turn IP blocking **off** for this key — Railway's address changes.
+3. Set `BREVO_API_KEY` and `MAIL_FROM` (and optionally `MAIL_FROM_NAME`, `MAIL_REPLY_TO`) on the server.
+4. Send yourself one payslip first (Weekly Report → **Email**) and check it arrives in the inbox, not spam. A Gmail address as `MAIL_FROM` may be flagged by Gmail; a small domain of your own (e.g. `payroll@yourshop.com.au`, verified in Brevo) is the reliable option.
+
+Each send is written to the audit log; "Email all payslips" shows when that week was last sent and cannot run twice at once.
+
 ## Settings (environment variables)
 
 | Variable | Default | Meaning |
@@ -56,7 +86,13 @@ You can also download a portable JSON backup any time from Admin → Settings �
 | `DB_PATH` | `data/timeclock.db` | Database file |
 | `BACKUP_DIR` | `data/backups` | Snapshot folder |
 | `BACKUP_KEEP` | `14` | Snapshots to keep |
-| `TZ` | system | Timezone used for days and weeks (set it if the server is in a different timezone from the shop) |
+| `TZ` | system | Timezone used for days, weeks and roster times. On Railway this is set: `TZ=Australia/Sydney`. |
+| `BREVO_API_KEY` | – | Brevo API key for payslip emails (keep it secret; set it as a Railway variable) |
+| `MAIL_FROM` | – | Verified Brevo sender address |
+| `MAIL_FROM_NAME`, `MAIL_REPLY_TO` | – | Optional sender name and reply-to address |
+| `ROSTER_IMPORT_URL` | old roster app | Where **Import old roster** fetches from |
+
+Before upgrading a live database the server saves a copy next to it (`timeclock-premigrate-v1-….db`).
 
 On Windows PowerShell: `$env:PORT=8080; npm start`.
 

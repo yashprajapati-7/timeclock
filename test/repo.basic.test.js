@@ -17,7 +17,8 @@ test('settings defaults and patch', () => {
 test('employee round trip, duplicate pin, find by pin', () => {
   const db = memDb();
   R.createEmployee(db, { id: 'e1', name: 'Ann', pin: '1111', rate1: 20, rate2: null, active: true }, 0);
-  assert.deepEqual(R.getEmployee(db, 'e1'), { id: 'e1', name: 'Ann', pin: '1111', rate1: 20, rate2: null, active: true });
+  assert.deepEqual(R.getEmployee(db, 'e1'), { id: 'e1', name: 'Ann', pin: '1111', rate1: 20, rate2: null, active: true,
+    role: '', payType: 'hourly', weeklySalary: null, email: '', phone: '', birthday: null, startDate: null, fixedItems: [] });
   assert.throws(() => R.createEmployee(db, { id: 'e2', name: 'B', pin: '1111', active: true }, 0));
   R.updateEmployee(db, 'e1', { name: 'Ann B', pin: '1111', rate1: 21, rate2: 30, active: false });
   assert.equal(R.findEmployeeByPin(db, '1111'), undefined);
@@ -34,4 +35,22 @@ test('audit search and limit', () => {
   R.addAudit(db, { ts: 3, actor: 'Ann', action: 'Clock out', detail: '' });
   assert.deepEqual(R.listAudit(db, { q: 'CLOCK' }).map(a => a.ts), [3, 1]);
   assert.equal(R.listAudit(db, { limit: 1 })[0].ts, 3);
+});
+
+test('employee round-trips the new fields; old-style create gets defaults', () => {
+  const db = memDb();
+  const full = { id: 'e9', name: 'Sal', pin: '9999', rate1: null, rate2: null, active: true, role: 'Barista', payType: 'salary',
+    weeklySalary: 800, email: 'a@b.co', phone: '0400 000 000', birthday: '1999-11-02', startDate: '2024-11-04',
+    fixedItems: [{ type: 'allowance', label: 'Phone', amount: 10, from: '2026-10-26' }] };
+  R.createEmployee(db, full, 0);
+  assert.deepEqual(R.getEmployee(db, 'e9'), full);
+  R.updateEmployee(db, 'e9', { ...full, payType: 'hourly', weeklySalary: null, fixedItems: [] });
+  assert.equal(R.getEmployee(db, 'e9').payType, 'hourly');
+  assert.deepEqual(R.getEmployee(db, 'e9').fixedItems, []);
+  R.createEmployee(db, { id: 'e1', name: 'Old', pin: '1111', active: true }, 0);
+  const old = R.getEmployee(db, 'e1');
+  assert.equal(old.payType, 'hourly');
+  assert.deepEqual(old.fixedItems, []);
+  assert.equal(old.email, '');
+  assert.equal(old.birthday, null);
 });

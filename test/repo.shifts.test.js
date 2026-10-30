@@ -13,7 +13,7 @@ const seed = () => {
 test('shift with breaks round trips', () => {
   const db = seed();
   R.saveShift(db, { id: 's1', empId: 'e1', in: 100, out: null, breaks: [{ start: 300, end: 400 }, { start: 150, end: 200 }] });
-  assert.deepEqual(R.getShift(db, 's1'), { id: 's1', empId: 'e1', in: 100, out: null, breaks: [{ start: 150, end: 200 }, { start: 300, end: 400 }] });
+  assert.deepEqual(R.getShift(db, 's1'), { id: 's1', empId: 'e1', in: 100, out: null, breaks: [{ start: 150, end: 200 }, { start: 300, end: 400 }], otApproved: false });
   R.saveShift(db, { id: 's1', empId: 'e1', in: 100, out: 500, breaks: [{ start: 150, end: null }] });
   assert.equal(db.get('SELECT COUNT(*) n FROM breaks').n, 1);
   assert.equal(R.getShift(db, 's1').out, 500);
@@ -48,4 +48,12 @@ test('loadData feeds pay.week like a hand-built fixture', () => {
   const [r] = week(R.loadData(db), new Date(d(2026,10,26)));
   assert.equal(r.paid, 27.5);
   assert.equal(r.gross, 585);
+});
+
+test('otApproved persists and defaults false', () => {
+  const db = seed();
+  R.saveShift(db, { id: 'a', empId: 'e1', in: 100, out: 200, breaks: [] });
+  assert.equal(R.getShift(db, 'a').otApproved, false);
+  R.saveShift(db, { id: 'a', empId: 'e1', in: 100, out: 200, breaks: [], otApproved: true });
+  assert.equal(R.getShift(db, 'a').otApproved, true);
 });

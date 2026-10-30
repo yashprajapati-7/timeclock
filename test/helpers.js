@@ -14,9 +14,9 @@ export function fakeClock(start = d(2026, 10, 30, 12)){
   c.advance = ms => { c.t += ms; };
   return c;
 }
-export async function makeTestApp({ clock = fakeClock(), db = memDb() } = {}){
+export async function makeTestApp({ clock = fakeClock(), db = memDb(), ...opts } = {}){
   await ensureAdminPin(db, clock());
-  return { app: createApp({ db, clock }), db, clock };
+  return { app: createApp({ db, clock, ...opts }), db, clock };
 }
 export async function loginAgent(app, pin = '0000'){
   const agent = request.agent(app);

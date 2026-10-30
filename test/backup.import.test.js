@@ -50,3 +50,28 @@ test('invalid backup leaves existing data unchanged', async () => {
   await assert.rejects(importBackup(db, bad, { now }));
   assert.equal(listEmployees(db).length, 3);
 });
+
+test('v3 round trip keeps roster, fixed items, salary, otApproved, rounding settings and import mapping', async () => {
+  const a = memDb(), b = memDb();
+  await importBackup(a, fixture('backup-v2'), { now });
+  const { createEmployee, replaceRosterCell, saveShift, setSettings, getShift } = await import('../src/repo.js');
+  createEmployee(a, { id: 's9', name: 'Sal', pin: '9999', active: true, payType: 'salary', weeklySalary: 800, email: 's@x.co',
+    birthday: '1990-01-01', fixedItems: [{ type: 'allowance', label: 'Phone', amount: 10, from: '2026-10-26', to: null }] }, 9);
+  replaceRosterCell(a, 'e1', '2026-10-27', [{ type: 'CAFE', start: '09:00', end: '15:00' }, { type: 'OFF' }]);
+  saveShift(a, { ...getShift(a, 's2'), otApproved: true });
+  setSettings(a, { roundFrom: '2026-10-26', rosterImport: { offsetDays: 1, idMap: { 1: 'e1' } } });
+  const exported = exportBackup(a);
+  assert.equal(exported.v, 3);
+  await importBackup(b, JSON.parse(JSON.stringify(exported)), { now });
+  const strip = x => ({ ...x, settings: { ...x.settings, adminPinHash: undefined } });
+  assert.deepEqual(strip(loadData(b)), strip(loadData(a)));
+  assert.deepEqual(getSettings(b).rosterImport, { offsetDays: 1, idMap: { 1: 'e1' } });
+  assert.deepEqual(week(loadData(b), ws, now).map(r => r.net), week(loadData(a), ws, now).map(r => r.net));
+});
+
+test('older backups import with no roster and rounding not in effect', async () => {
+  const db = memDb();
+  await importBackup(db, fixture('backup-v2'), { now });
+  assert.deepEqual(loadData(db).roster, {});
+  assert.equal(getSettings(db).roundFrom, null);
+});

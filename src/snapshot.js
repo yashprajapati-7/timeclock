@@ -17,6 +17,18 @@ export function snapshot(db, dir, now = Date.now()){
   return target;
 }
 
+// Safety copy before schema migrations, written next to the database file (so it lands on the same volume).
+// Its name does not match SNAPSHOT, so prune() never removes it. Must run outside any transaction.
+export function snapshotBeforeMigrate(db, now = Date.now()){
+  if(!db.file || db.file === ':memory:') return null;
+  const from = db.get('PRAGMA user_version').user_version;
+  const d = new Date(now), hms = [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join('');
+  const target = path.join(path.dirname(db.file), `timeclock-premigrate-v${from}-${ymd(now)}-${hms}.db`);
+  if(fs.existsSync(target)) return target;
+  db.raw.prepare('VACUUM INTO ?').run(target);
+  return target;
+}
+
 export function prune(dir, keep){
   if(!fs.existsSync(dir)) return;
   const files = fs.readdirSync(dir).filter(f => SNAPSHOT.test(f)).sort().reverse();   // dated names sort chronologically

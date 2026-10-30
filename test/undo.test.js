@@ -67,3 +67,15 @@ test('conflict: kiosk punch after admin edit → 409, punch kept', async () => {
   assert.equal(after.shifts[0].out, clock());
   assert.equal(after.undoLabel, 'Edit shift');
 });
+
+test('undo restores the new employee fields', async () => {
+  const { a, emp, state, undo } = await setup();
+  const full = { name: 'Ann', pin: '1111', rate1: 20, email: 'ann@x.co', phone: '0400 111 222', birthday: '1990-01-01',
+    fixedItems: [{ type: 'allowance', label: 'Phone', amount: 10, from: '2026-10-26' }] };
+  await a.put(`/api/admin/employees/${emp}`).send(full);
+  await a.put(`/api/admin/employees/${emp}`).send({ ...full, email: 'other@x.co', fixedItems: [] });
+  await undo();
+  const e = (await state()).employees[0];
+  assert.equal(e.email, 'ann@x.co');
+  assert.equal(e.fixedItems.length, 1);
+});

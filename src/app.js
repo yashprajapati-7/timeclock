@@ -7,6 +7,8 @@ import { authRoutes, requireAdmin } from './routes/auth.js';
 import { kioskRoutes } from './routes/kiosk.js';
 import { adminRoutes } from './routes/admin.js';
 import { exportRoutes } from './routes/exports.js';
+import { rosterRoutes } from './routes/roster.js';
+import { mailRoutes } from './routes/mail.js';
 import { createUndo } from './undo.js';
 
 // Every state-changing API call must be JSON: with SameSite=Strict cookies this is the CSRF defence.
@@ -18,11 +20,12 @@ function requireJson(req, res, next){
   next();
 }
 
-export function createApp({ db, clock = Date.now, trustProxy = false }){
+export function createApp({ db, clock = Date.now, trustProxy = false, mailer = null, fetch: fetchImpl = globalThis.fetch, rosterImportUrl }){
   const ctx = {
     db, clock,
     lockouts: { admin: createLockout({ max: 5, ms: 60000, clock }), kiosk: createLockout({ max: 5, ms: 30000, clock }) },
     undo: createUndo(db, clock),
+    mailer, fetch: fetchImpl, rosterImportUrl,
   };
   const app = express();
   app.disable('x-powered-by');
@@ -37,6 +40,8 @@ export function createApp({ db, clock = Date.now, trustProxy = false }){
   app.use('/api/kiosk', kioskRoutes(ctx));
   app.use('/api/admin', requireAdmin(ctx));
   app.use('/api/admin/export', exportRoutes(ctx));
+  app.use('/api/admin/roster', rosterRoutes(ctx));
+  app.use('/api/admin/payslips', mailRoutes(ctx));
   app.use('/api/admin', adminRoutes(ctx));
 
   app.use('/api', (req, res, next) => next(new HttpError(404, 'Not found')));
@@ -47,8 +52,11 @@ export function createApp({ db, clock = Date.now, trustProxy = false }){
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
     const status = err.status ?? err.statusCode ?? 500;
-    if(status >= 500) console.error(err);
-    res.status(status).json({ error: status >= 500 ? 'Server error' : err.message });
+    // Deliberate HttpErrors (e.g. 502 "old roster app unreachable", 503 "email not set up") keep their message;
+    // unexpected crashes are logged and stay generic.
+    const expose = status < 500 || err instanceof HttpError;
+    if(!expose) console.error(err);
+    res.status(status).json({ error: expose ? err.message : 'Server error' });
   });
   return app;
 }

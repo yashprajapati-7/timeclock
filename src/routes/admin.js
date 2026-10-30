@@ -7,7 +7,7 @@ import { normalizeBackup, importBackup, exportBackup } from '../backup.js';
 import { ensureAdminPin } from './auth.js';
 import { clamp, fmtDay, hm, money, ymd } from '../shared/format.js';
 
-export function adminRoutes({ db, clock, undo }){
+export function adminRoutes({ db, clock, undo, mailer }){
   const r = Router();
   const audit = (action, detail = '') => R.addAudit(db, { ts: clock(), actor: 'Admin', action, detail });
   const mustGet = (getter, id, what) => { const x = getter(db, id); if(!x) throw new HttpError(404, `${what} not found`); return x; };
@@ -21,7 +21,10 @@ export function adminRoutes({ db, clock, undo }){
 
   r.get('/state', (req, res) => {
     res.json({ settings: R.publicSettings(db), employees: R.listEmployees(db), shifts: R.listShifts(db),
-      adj: R.listAdjustments(db), undoLabel: undo.label(req.session.key) });
+      adj: R.listAdjustments(db), roster: R.listRoster(db), undoLabel: undo.label(req.session.key),
+      // The browser compares this with its own offset (days/weeks are server-local time).
+      tz: { name: Intl.DateTimeFormat().resolvedOptions().timeZone, offsetMin: -new Date(clock()).getTimezoneOffset() },
+      mailConfigured: !!mailer?.configured });
   });
 
   r.get('/audit', (req, res) => {
@@ -58,6 +61,7 @@ export function adminRoutes({ db, clock, undo }){
     if(R.employeeHasShifts(db, e.id)) throw new HttpError(409, 'This employee has shift history; set them Inactive instead');
     change(req, 'Delete employee', touch => {
       for(const a of db.all('SELECT id FROM adjustments WHERE emp_id = ?', e.id)) touch('adjustments', a.id);
+      for(const r of db.all('SELECT id FROM roster WHERE emp_id = ?', e.id)) touch('roster', r.id);
       touch('employees', e.id);
       R.deleteEmployee(db, e.id);
       return e.name;
@@ -83,7 +87,7 @@ export function adminRoutes({ db, clock, undo }){
 
   // ----- Shifts -----
   const checkedShift = (body, id) => {
-    const input = { empId: body?.empId, in: body?.in, out: body?.out ?? null, breaks: body?.breaks ?? [] };
+    const input = { empId: body?.empId, in: body?.in, out: body?.out ?? null, breaks: body?.breaks ?? [], otApproved: body?.otApproved };
     if(!R.getEmployee(db, input.empId)) throw new ValidationError('Choose an employee');
     const others = R.listShifts(db, { empId: input.empId }).filter(s => s.id !== id);
     return validateShift(input, others);
@@ -167,7 +171,7 @@ export function adminRoutes({ db, clock, undo }){
   r.post('/erase', async (req, res) => {
     if(req.body?.confirm !== 'ERASE') throw new ValidationError('Type ERASE to confirm');
     db.tx(() => {
-      for(const t of ['breaks', 'adjustments', 'shifts', 'employees', 'settings', 'audit']) db.run(`DELETE FROM ${t}`);
+      for(const t of ['breaks', 'adjustments', 'roster', 'shifts', 'employees', 'settings', 'audit']) db.run(`DELETE FROM ${t}`);
     });
     await ensureAdminPin(db, clock());
     audit('Erase all data');

@@ -36,3 +36,43 @@ test('csvBuild quotes, escapes and adds BOM', () => {
   const out = F.csvBuild([['a', 'b"c'], ['=x', 1]]);
   assert.equal(out, '﻿"a","b""c"\r\n"\'=x","1"');
 });
+
+test('rounding helpers work on local wall-clock minutes', () => {
+  const t = (h, m, s = 0) => new Date(2026, 9, 27, h, m, s).getTime();
+  assert.equal(F.floorMin(t(9, 6, 59)), t(9, 6));
+  assert.equal(F.ceilStep(t(9, 8), 15), t(9, 15));
+  assert.equal(F.ceilStep(t(9, 15), 15), t(9, 15));
+  assert.equal(F.ceilStep(t(9, 16), 15), t(9, 30));
+  assert.equal(F.ceilStep(t(23, 50), 15), new Date(2026, 9, 28, 0, 0).getTime());
+  assert.equal(F.floorStep(t(16, 40), 15), t(16, 30));
+  assert.equal(F.floorStep(t(16, 30), 15), t(16, 30));
+});
+
+test('atLocal builds local wall-clock times, including across DST changes', () => {
+  assert.equal(F.atLocal('2026-10-27', '09:30'), new Date(2026, 9, 27, 9, 30).getTime());
+  // Sydney DST starts 2026-10-04 and ends 2027-04-04; wall-clock 06:00 must stay 06:00 locally.
+  for(const day of ['2026-10-04', '2027-04-04']){
+    const ts = F.atLocal(day, '06:00'), d = new Date(ts);
+    assert.equal(F.ymd(ts), day);
+    assert.equal(d.getHours(), 6);
+    assert.equal(d.getMinutes(), 0);
+  }
+  assert.equal(F.addDaysYmd('2026-10-31', 1), '2026-11-01');
+  assert.equal(F.addDaysYmd('2026-11-01', -1), '2026-10-31');
+});
+
+test('parseShortTime accepts the roster shorthand and 24h times', () => {
+  assert.equal(F.parseShortTime('9.30', 'AM'), '09:30');
+  assert.equal(F.parseShortTime('9.5', 'PM'), '21:50');
+  assert.equal(F.parseShortTime('9', 'AM'), '09:00');
+  assert.equal(F.parseShortTime('12', 'AM'), '00:00');
+  assert.equal(F.parseShortTime('12', 'PM'), '12:00');
+  assert.equal(F.parseShortTime('17:00'), '17:00');
+  assert.equal(F.parseShortTime('7:05', 'PM'), '19:05');
+  assert.equal(F.parseShortTime('13', 'PM'), null);
+  assert.equal(F.parseShortTime('9.75', 'AM'), null);
+  assert.equal(F.parseShortTime('', 'AM'), null);
+  assert.equal(F.fmt12('09:00'), '9A');
+  assert.equal(F.fmt12('17:30'), '5:30P');
+  assert.equal(F.fmt12('00:00'), '12A');
+});

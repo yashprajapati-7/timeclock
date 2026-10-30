@@ -1,7 +1,7 @@
 // Kiosk punch state machine: in → (bs → be)* → out. The server clock is the time of every punch.
 import { HttpError, ValidationError } from './errors.js';
-import { openShiftFor, saveShift, getSettings, addAudit } from './repo.js';
-import { shift as calcShift } from './shared/pay.js';
+import { openShiftFor, saveShift, addAudit, loadData } from './repo.js';
+import { calcAll } from './shared/pay.js';
 import { hm } from './shared/format.js';
 import { randomUUID } from 'node:crypto';
 
@@ -33,7 +33,8 @@ export function punch(db, emp, type, now){
       detail = `out at ${hm(now)}`;
     }
     saveShift(db, sh);
-    const calc = calcShift(sh, getSettings(db), now);
+    // Priced with the roster (paid in/out, late minutes) exactly as reports will show it.
+    const calc = calcAll(loadData(db), now).get(sh.id);
     addAudit(db, { ts: now, actor: emp.name, action: LABEL[type], detail });
     return { type, at: now, shift: sh, calc };
   });

@@ -13,5 +13,6 @@ export function loadConfig(env = process.env) {
     backupKeep: Number(env.BACKUP_KEEP) || 14,
     // Number of reverse proxies in front of the app (1 on Railway); false when serving directly.
     trustProxy: Number(env.TRUST_PROXY) || false,
+    rosterImportUrl: env.ROSTER_IMPORT_URL || 'https://roster-production-3522.up.railway.app/api/roster',
   };
 }

@@ -7,7 +7,7 @@
   - Actions / Forms / Changes / Inputs: one delegated listener per event type (data-act, data-submit, …).
 */
 import { H, MIN, DAYS, pad, num, clamp, trunc, initials, ymd, toLocalInput, fromLocalInput, fmtTime, fmtDay, fmtStamp,
-  fmtHM, fmtMin, fmtElapsed, money as fmtMoney, startOfWeek, addDays, niceStep, csvBuild } from '/shared/format.js';
+  fmtHM, fmtMin, fmtElapsed, money as fmtMoney, startOfWeek, addDays, niceStep, csvBuild, parseShortTime, rosterLabel } from '/shared/format.js';
 import * as Pay from '/shared/pay.js';
 import { api } from '/api.js';
 
@@ -209,6 +209,7 @@ const Kiosk = {
     if(ui.view === 'kiosk'){ applyTheme(); Kiosk.tick(Date.now()); }
   },
   render(){
+    app.className = ''; delete app.dataset.tab;     // the kiosk stays black & white
     app.innerHTML = html`
       <header class="bar"><div class="brand">${Kiosk.info?.company ?? 'Time Clock'}</div>
         <button class="sm" data-act="openAdmin">Admin</button></header>
@@ -287,6 +288,7 @@ const Kiosk = {
     Kiosk.idleDeadline = now + Math.max(5, num(Kiosk.info?.kioskIdleSec) || 20) * 1000;
     box.innerHTML = html`
       <div class="lbl">Hello</div><div class="name">${cur.employee.name}</div>
+      <div class="lbl" style="margin-bottom:12px">${cur.roster?.length ? html`Rostered today: ${cur.roster.map(e => e.start ? `${e.type} ${e.start}–${e.end}` : e.type).join(' · ')}` : 'Not rostered today'}</div>
       <div class="status">${Kiosk.statusHTML(sh, now)}</div>
       <div class="mini"><div><span class="k">Today</span><b>${fmtHM(cur.todayPaid)}</b></div><div><span class="k">This week</span><b>${fmtHM(cur.weekPaid)}</b></div></div>
       ${tier ? html`<div class="progress" role="progressbar" aria-label="Paid hours this week" aria-valuemin="0" aria-valuemax="${tier}" aria-valuenow="${cur.weekPaid.toFixed(2)}"><i style="width:${(pct * 100).toFixed(1)}%"></i></div>
@@ -321,7 +323,7 @@ const Kiosk = {
 // ---------- Admin ----------
 const Admin = {
   lastActive: 0, refreshedAt: 0, lockUntil: 0,
-  tabs: [['dashboard','Dashboard'],['report','Weekly Report'],['shifts','Shifts'],['employees','Employees'],['audit','Audit Log'],['settings','Settings']],
+  tabs: [['dashboard','Dashboard'],['roster','Roster'],['report','Weekly Report'],['shifts','Shifts'],['employees','Employees'],['audit','Audit Log'],['settings','Settings']],
   loginModal(){
     const locked = Date.now() < Admin.lockUntil;
     Modal.open(html`<form data-submit="adminLogin"><h2 id="modalTitle">Admin access</h2>
@@ -352,6 +354,7 @@ const Admin = {
   render(){
     if(!db()) return;
     const s = db(), undoLabel = RemoteStore.undoLabel, alerts = Pay.anomalies(s, startOfWeek(new Date())).length;
+    app.className = 'admin'; app.dataset.tab = ui.tab;   // per-tab colour accent
     app.innerHTML = html`
       <header class="bar noprint"><div class="brand">${s.settings.company}<span class="hide-sm"> · Admin</span></div>
         <div class="row tight">
@@ -359,7 +362,7 @@ const Admin = {
           <button class="sm" data-act="themeCycle" title="Theme: ${s.settings.theme}" aria-label="Switch theme">◐<span class="hide-sm"> ${s.settings.theme}</span></button>
           <button class="sm inv" data-act="logout">Lock<span class="hide-sm"> · Back to clock</span></button>
         </div></header>
-      <nav class="tabs noprint" role="tablist">${Admin.tabs.map(([k, l]) => html`<button role="tab" aria-selected="${ui.tab === k}" class="${ui.tab === k ? 'on' : ''}" data-act="tab" data-k="${k}">${l}${k === 'dashboard' && alerts ? html` <span class="badge" aria-label="${alerts} alerts">${alerts}</span>` : ''}</button>`)}</nav>
+      <nav class="tabs noprint" role="tablist">${Admin.tabs.map(([k, l]) => html`<button role="tab" aria-selected="${ui.tab === k}" class="${ui.tab === k ? 'on' : ''}" style="--tab:var(--c-${k})" data-act="tab" data-k="${k}">${l}${k === 'dashboard' && alerts ? html` <span class="badge" aria-label="${alerts} alerts">${alerts}</span>` : ''}</button>`)}</nav>
       <main class="wrap">${Views[ui.tab]()}</main>`;
     tickLive();
   },
@@ -394,36 +397,122 @@ function ruleRow(r){
     <div><label>Break minutes</label><input type="number" step="1" min="0" name="rm" value="${r.m}"></div>
     <button type="button" class="sm" data-act="removeRow" aria-label="Remove rule">✕</button></div>`;
 }
-const SORTS = { name: r => r.e.name.toLowerCase(), total: r => r.total, paid: r => r.paid, gross: r => r.gross, net: r => r.net };
+const SORTS = { name: r => r.e.name.toLowerCase(), total: r => r.total, paid: r => r.paid, net: r => r.net };
 function sortRows(rows){
   const f = SORTS[ui.sort.k] || SORTS.name, d = ui.sort.dir;
   return rows.sort((a, b) => { const x = f(a), y = f(b); return (x < y ? -1 : x > y ? 1 : 0) * d; });
 }
 const weekParam = () => `week=${ymd(ui.weekStart)}`;
 
+const chipType = t => t === 'BAKERY YC' ? 'BKYC' : t;
+// Save one roster day; asks first when the change re-prices shifts that were already worked.
+async function saveRosterCell(entries){
+  const { empId, day } = ui.rosterEdit, path = `/api/admin/roster/${encodeURIComponent(empId)}/${day}`;
+  if(day < ymd(Date.now())){
+    const dry = await api.put(path, { entries, dryRun: true }).catch(e => { Toast.show(e.message, {ms:4000}); return null; });
+    if(!dry) return;
+    if(dry.repriced && !await Modal.confirm(`This changes paid times for ${dry.repriced} shift(s) already worked on or around this day.`, { title: 'Change a past roster day?', ok: 'Change' })) return;
+  }
+  if(await RemoteStore.call('put', path, { entries })) Dialogs.rosterCell(empId, day);
+}
+
+// Employee form fields shared by "Add employee" and the edit dialog. data-pay on the form shows hourly or salary inputs.
+function empFields(e, p = 'e'){
+  const st = db().settings, tier = num(st.tierHours), v = x => x ?? '';
+  return html`<div class="grid">
+    <div><label for="${p}Name">Name</label><input id="${p}Name" name="name" value="${v(e.name)}" required autocomplete="off"></div>
+    <div><label for="${p}Pin">4-digit code</label><input id="${p}Pin" name="pin" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" value="${v(e.pin)}" required autocomplete="off"></div>
+    <div><label for="${p}Role">Role</label><input id="${p}Role" name="role" maxlength="40" value="${v(e.role)}" placeholder="e.g. Barista"></div>
+    <div><label for="${p}Pay">Pay type</label><select id="${p}Pay" name="payType" data-change="payType">
+      <option value="hourly">Hourly rate</option><option value="salary" ${e.payType === 'salary' ? 'selected' : ''}>Fixed weekly salary</option></select></div>
+    <div class="pay-hourly"><label for="${p}R1">Rate first ${tier}h (${st.currency}/h)</label><input id="${p}R1" name="rate1" type="number" step="0.01" min="0" value="${v(e.rate1)}"></div>
+    <div class="pay-hourly"><label for="${p}R2">Rate after ${tier}h (${st.currency}/h)</label><input id="${p}R2" name="rate2" type="number" step="0.01" min="0" value="${v(e.rate2)}"></div>
+    <div class="pay-salary"><label for="${p}Sal">Weekly salary (${st.currency})</label><input id="${p}Sal" name="weeklySalary" type="number" step="0.01" min="0" value="${v(e.weeklySalary)}"></div>
+    <div><label for="${p}Mail">Email (for payslips)</label><input id="${p}Mail" name="email" type="email" value="${v(e.email)}" autocomplete="off"></div>
+    <div><label for="${p}Phone">Phone</label><input id="${p}Phone" name="phone" type="tel" value="${v(e.phone)}" autocomplete="off"></div>
+    <div><label for="${p}Bday">Birthday</label><input id="${p}Bday" name="birthday" type="date" value="${v(e.birthday)}"></div>
+    <div><label for="${p}Start">Start date</label><input id="${p}Start" name="startDate" type="date" value="${v(e.startDate)}"></div>
+  </div>`;
+}
+const empBody = fd => {
+  const payType = fd.get('payType') === 'salary' ? 'salary' : 'hourly';
+  return { name: String(fd.get('name')).trim(), pin: String(fd.get('pin')).trim(), role: String(fd.get('role') ?? '').trim(), payType,
+    rate1: fd.get('rate1'), rate2: fd.get('rate2'), weeklySalary: payType === 'salary' ? fd.get('weeklySalary') : null,
+    email: String(fd.get('email') ?? '').trim(), phone: String(fd.get('phone') ?? '').trim(),
+    birthday: fd.get('birthday') || null, startDate: fd.get('startDate') || null };
+};
+// One editable fixed item. Items that already applied in past weeks are ended (not deleted) so old payslips don't change.
+function fixedItemRow(f = {}){
+  const thisWeek = ymd(startOfWeek(new Date()));
+  return html`<div class="grid dyn fi" style="grid-template-columns:1fr 2fr 1fr 1fr auto">
+    <div><label>Type</label><select name="fiType"><option value="allowance">+ Allowance</option><option value="deduction" ${f.type === 'deduction' ? 'selected' : ''}>− Deduction</option></select></div>
+    <div><label>Description</label><input name="fiLabel" maxlength="60" value="${f.label ?? ''}" placeholder="e.g. Phone, Uniform"></div>
+    <div><label>Amount / week</label><input name="fiAmount" type="number" step="0.01" min="0.01" value="${f.amount ?? ''}"></div>
+    <div><label>From week</label><input name="fiFrom" type="date" value="${f.from ?? thisWeek}"></div>
+    <input type="hidden" name="fiTo" value="${f.to ?? ''}">
+    <button type="button" class="sm" data-act="removeFixedItem" aria-label="Remove">${f.to ? 'ended' : '✕'}</button></div>`;
+}
+const fixedItemsFrom = fd => {
+  const [types, labels, amounts, froms, tos] = ['fiType', 'fiLabel', 'fiAmount', 'fiFrom', 'fiTo'].map(k => fd.getAll(k));
+  return types.map((type, i) => ({ type, label: labels[i], amount: amounts[i], from: ymd(startOfWeek(new Date(froms[i] + 'T00:00'))), to: tos[i] || null }))
+    .filter(f => f.label || f.amount);
+};
+
+function showEmailResults(r){
+  const label = { sent: html`<span class="tag ok">SENT</span>`, skipped: html`<span class="tag">SKIPPED</span>`, failed: html`<span class="tag late">FAILED</span>` };
+  Modal.open(html`<h2 id="modalTitle">Payslip email · week of ${r.week}</h2>
+    <div class="tablewrap" style="box-shadow:none"><table class="stack"><tbody>${r.results.map(x => html`<tr>
+      <td class="l head">${x.name}</td><td data-label="Result">${label[x.status]}</td><td class="l" data-label="Note">${x.error ?? ''}</td></tr>`)}</tbody></table></div>
+    <div class="row"><button class="inv" data-act="modalCancel">Done</button></div>`);
+}
+
+const clock12 = ts => { const d = new Date(ts); return `${d.getHours()}:${pad(d.getMinutes())}`; };
+// "9:15–17:00 LATE 8m" style summary of how a shift was paid against the roster.
+function paidTimes(sh, c){
+  if(!c) return '';
+  if(!c.roster) return html`${fmtTime(c.paidIn)}–${sh.out ? fmtTime(c.paidOut) : '…'} ${db().settings.roundFrom && ymd(sh.in) >= db().settings.roundFrom ? html`<span class="tag">UNROSTERED</span>` : ''}`;
+  return html`${fmtTime(c.paidIn)}–${sh.out ? fmtTime(c.paidOut) : '…'}
+    ${c.lateMin > num(db().settings.roundGraceMin) ? html`<span class="tag late">LATE ${c.lateMin}m</span>` : ''}
+    ${c.capped ? html`<span class="tag brk" title="Not paid unless overtime is approved">OVER ${c.capped}m</span>` : ''}
+    ${c.earlyMin ? html`<span class="tag brk">EARLY ${c.earlyMin}m</span>` : ''}
+    ${sh.otApproved ? html`<span class="tag ok">OT OK</span>` : ''}`;
+}
+
 const Views = {
   dashboard(){
     const now = Date.now(), s = db(), ws = startOfWeek(now), tier = num(s.settings.tierHours);
     const rows = Pay.week(s, ws, now), T = Pay.totals(rows), alerts = Pay.anomalies(s, ws, now);
+    // Days and weeks are server-local; warn if this device's clock is in a different timezone.
+    if(s.tz && s.tz.offsetMin !== -new Date(now).getTimezoneOffset())
+      alerts.unshift({ level: 'high', msg: `Server timezone (${s.tz.name}) differs from this device. Check TZ on the server.` });
     const open = s.shifts.filter(x => x.out == null).sort((a, b) => a.in - b.in), onBreak = open.filter(openBreak).length;
+    const calcs = Pay.calcAll(s, now, { from: +startOfWeek(now) - 86400000 });
+    const lateToday = s.shifts.filter(x => ymd(x.in) === ymd(now) && (calcs.get(x.id)?.lateMin ?? 0) > num(s.settings.roundGraceMin)).length;
+    const soon = Pay.upcoming(s.employees, now);
     return html`
       <div class="kpis">
         ${kpi('On shift now', open.length - onBreak)}${kpi('On break now', onBreak)}
         ${kpi('Paid hours · week', fmtHM(T.paid))}${kpi('Net payroll · week', money(T.net))}
-        ${kpi('Active staff', s.employees.filter(e => e.active !== false).length)}${kpi('Alerts', alerts.length, alerts.length ? 'alert' : '')}
+        ${kpi('Active staff', s.employees.filter(e => e.active !== false).length)}${kpi('Late today', lateToday, lateToday ? 'alert' : '')}${kpi('Alerts', alerts.length, alerts.length ? 'alert' : '')}
       </div>
       <div class="cols">
         <div class="section"><h3>On the clock now (${open.length})</h3>
           ${open.length ? html`<div class="tablewrap" style="box-shadow:none"><table class="stack">
-            <thead><tr><th class="l">Employee</th><th>In</th><th>Elapsed</th><th class="l">Status</th><th>Break</th><th></th></tr></thead>
-            <tbody>${open.map(sh => { const b = openBreak(sh), c = Pay.shift(sh, s.settings, now); return html`<tr>
-              <td class="l head">${empName(sh.empId)}</td>
+            <thead><tr><th class="l">Employee</th><th>Rostered</th><th>In</th><th>Elapsed</th><th class="l">Status</th><th>Break</th><th></th></tr></thead>
+            <tbody>${open.map(sh => { const b = openBreak(sh), c = calcs.get(sh.id) ?? Pay.shift(sh, s.settings, now); return html`<tr>
+              <td class="l head">${empName(sh.empId)}${c.lateMin > num(s.settings.roundGraceMin) ? html` <span class="tag late">LATE</span>` : ''}</td>
+              <td data-label="Rostered">${c.roster ? `${c.roster.start}–${c.roster.end}` : html`<span class="muted">–</span>`}</td>
               <td data-label="In">${fmtTime(sh.in)}${ymd(sh.in) !== ymd(now) ? html` <small>${fmtDay(sh.in)}</small>` : ''}</td>
               <td data-label="Elapsed" data-elapsed="${sh.in}"></td>
               <td class="l" data-label="Status">${b ? html`<span class="tag">ON BREAK</span>` : html`<span class="tag b">WORKING</span>`}</td>
               <td data-label="Break">${fmtMin(c.actual)}</td>
               <td data-label=""><button class="sm" data-act="forceOut" data-id="${sh.id}">Clock out</button></td></tr>`; })}</tbody>
           </table></div>` : html`<span class="muted">Nobody is clocked in.</span>`}
+        </div>
+        <div class="section"><h3>Coming up · 7 days</h3>
+          ${soon.length ? html`<ul class="alerts">${soon.map(u => html`<li class="lvl-low"><span>${u.kind === 'birthday' ? '🎂' : '🎉'} <b>${u.name}</b> · ${u.kind === 'birthday' ? 'birthday' : `${u.years}-year work anniversary`}</span>
+            <b>${u.inDays === 0 ? 'TODAY' : u.inDays === 1 ? 'tomorrow' : `in ${u.inDays} days`}</b></li>`)}</ul>`
+            : html`<span class="muted">No birthdays or anniversaries this week.</span>`}
         </div>
         <div class="section"><h3>Alerts (${alerts.length})</h3>
           ${alerts.length ? html`<ul class="alerts">${alerts.map(a => html`<li class="lvl-${a.level}"><span>${a.msg}</span>
@@ -441,6 +530,33 @@ const Views = {
       </div>`;
   },
 
+  roster(){
+    const s = db(), w = Pay.rosterWeek(s, ui.weekStart), today = ymd(Date.now());
+    return html`${weekNav()}
+      <div class="row noprint actions-grid">
+        <button class="inv" data-act="rosterCopy">Copy to next week</button>
+        <button data-act="rosterPdf">Roster PDF</button>
+        <button data-act="rosterImport">Import old roster</button>
+        <button data-act="rosterClear">Clear week</button>
+      </div>
+      <div class="tablewrap roster-wrap"><table class="roster-grid">
+        <thead><tr><th class="rname">Staff</th>${w.days.map((dd, i) => html`<th class="${dd === today ? 'today' : ''}">${DAYS[i]}<br><small>${dd.slice(8)}/${dd.slice(5, 7)}</small></th>`)}<th>Hrs</th></tr></thead>
+        <tbody>${w.rows.length ? w.rows.map(r => html`<tr><td class="rname">${r.name}</td>
+          ${r.cells.map((entries, i) => html`<td class="rcell ${w.days[i] === today ? 'today' : ''}" data-act="rosterCell" data-emp="${r.empId}" data-day="${w.days[i]}" title="${r.name} · ${fmtDay(new Date(w.days[i] + 'T00:00'))}">
+            ${entries.length ? entries.map(e => html`<span class="chip t-${chipType(e.type)}">${rosterLabel(e)}</span>`) : html`<span class="muted">+</span>`}</td>`)}
+          <td><b>${r.total ? r.total.toFixed(1) : '–'}</b></td></tr>`)
+          : html`<tr><td class="l" colspan="9"><span class="muted">No staff yet.</span></td></tr>`}</tbody>
+        <tfoot><tr class="tot"><td class="rname">Staff on</td>${w.staffPerDay.map(n => html`<td>${n}</td>`)}<td><b>${w.total.toFixed(1)}</b></td></tr></tfoot>
+      </table></div>`;
+  },
+  rosterEntries(){
+    const list = ui.rosterEdit?.entries ?? [];
+    if(!list.length) return html`<p class="muted">Nothing rostered.</p>`;
+    return html`${list.map((e, i) => html`<div class="row tight" style="justify-content:space-between;margin-bottom:6px">
+      <span class="chip t-${chipType(e.type)}" style="flex:1">${e.start ? `${e.type} ${e.start}–${e.end}` : e.type}</span>
+      <button type="button" class="sm" data-act="rosterDelEntry" data-i="${i}" aria-label="Remove">✕</button></div>`)}`;
+  },
+
   report(){
     const s = db(), tier = num(s.settings.tierHours), rows = sortRows(Pay.week(s, ui.weekStart)), T = Pay.totals(rows), end = addDays(ui.weekStart, 6);
     const th = (k, label, cls = '') => html`<th class="${cls}" aria-sort="${ui.sort.k === k ? (ui.sort.dir > 0 ? 'ascending' : 'descending') : 'none'}">
@@ -449,27 +565,30 @@ const Views = {
       <h2 class="title">Weekly hours & pay · ${fmtDay(ui.weekStart)} – ${fmtDay(end)} ${end.getFullYear()}</h2>
       <div class="tablewrap"><table class="stack">
         <thead><tr>${th('name', 'Employee', 'l')}${DAYS.map(d => html`<th>${d}</th>`)}${th('total', 'Worked')}<th>Break</th>${th('paid', 'Paid hrs')}
-          <th>First ${tier}h</th><th>After ${tier}h</th>${th('gross', 'Gross')}<th>+ Allow.</th><th>− Deduct.</th>${th('net', 'Net pay')}<th class="noprint"></th></tr></thead>
+          <th>First ${tier}h</th><th>After ${tier}h</th><th>Salary</th><th>+ Allow.</th><th>− Deduct.</th>${th('net', 'Net pay')}<th class="noprint"></th></tr></thead>
         <tbody>
         ${rows.length ? rows.map(r => html`<tr>
-          <td class="l head"><a href="#" class="lnk" style="color:inherit;font-weight:700" data-act="showShifts" data-id="${r.e.id}">${r.e.name}</a>${r.open ? html` <span class="tag b">ON</span>` : ''}</td>
+          <td class="l head"><a href="#" class="lnk" style="color:inherit;font-weight:700" data-act="showShifts" data-id="${r.e.id}">${r.e.name}</a>${r.open ? html` <span class="tag b">ON</span>` : ''}${r.late ? html` <span class="tag late" title="${r.lateMin} min late in total">LATE×${r.late}</span>` : ''}</td>
           ${r.days.map((d, i) => html`<td class="d" data-label="${DAYS[i]}">${d ? fmtHM(d) : html`<span class="muted">–</span>`}</td>`)}
           <td data-label="Worked">${fmtHM(r.total)}</td><td data-label="Break">${fmtMin(r.ded)}</td><td data-label="Paid hrs"><b>${fmtHM(r.paid)}</b><br class="hide-sm"><small class="hide-sm">${r.paid.toFixed(2)}h</small></td>
           <td data-label="First ${tier}h"><span>${r.h1.toFixed(2)}h × ${r.r1 ? money(r.r1) : html`<b>?</b>`}<br><small>${money(r.p1)}</small></span></td>
           <td data-label="After ${tier}h"><span>${r.h2.toFixed(2)}h × ${r.r2 ? money(r.r2) : html`<b>?</b>`}<br><small>${money(r.p2)}</small></span></td>
-          <td data-label="Gross">${money(r.gross)}</td><td data-label="+ Allowances">${money(r.allow)}</td><td data-label="− Deductions">${money(r.deduct)}</td><td class="net" data-label="Net pay">${money(r.net)}</td>
+          <td data-label="Salary">${r.salary == null ? html`<span class="muted">–</span>` : money(r.salary)}</td><td data-label="+ Allowances">${money(r.allow)}</td><td data-label="− Deductions">${money(r.deduct)}</td><td class="net" data-label="Net pay">${money(r.net)}</td>
           <td class="noprint" data-label=""><button class="sm" data-act="adjust" data-id="${r.e.id}">± Adjust</button>
-            <button class="sm" data-act="payslip" data-id="${r.e.id}">Payslip</button></td></tr>`)
+            <button class="sm" data-act="payslip" data-id="${r.e.id}">Payslip</button>
+            <button class="sm" data-act="emailPayslip" data-id="${r.e.id}" ${s.mailConfigured && r.e.email ? '' : 'disabled'}
+              title="${!s.mailConfigured ? 'Email is not set up on the server' : r.e.email ? 'Email payslip to ' + r.e.email : 'No email address'}">Email</button></td></tr>`)
           : html`<tr><td class="l" colspan="19"><span class="muted">No employees yet.</span></td></tr>`}
         ${rows.length ? html`<tr class="tot"><td class="l head">TOTAL</td>${T.days.map((d, i) => html`<td class="d" data-label="${DAYS[i]}">${fmtHM(d)}</td>`)}
           <td data-label="Worked">${fmtHM(T.total)}</td><td data-label="Break">${fmtMin(T.ded)}</td><td data-label="Paid hrs">${fmtHM(T.paid)}</td><td data-label="First ${tier}h"><span>${T.h1.toFixed(2)}h<br><small>${money(T.p1)}</small></span></td>
-          <td data-label="After ${tier}h"><span>${T.h2.toFixed(2)}h<br><small>${money(T.p2)}</small></span></td><td data-label="Gross">${money(T.gross)}</td><td data-label="+ Allowances">${money(T.allow)}</td><td data-label="− Deductions">${money(T.deduct)}</td><td class="net" data-label="Net pay">${money(T.net)}</td><td class="noprint hide-sm"></td></tr>` : ''}
+          <td data-label="After ${tier}h"><span>${T.h2.toFixed(2)}h<br><small>${money(T.p2)}</small></span></td><td data-label="Salary">${money(rows.reduce((a, r) => a + (r.salary ?? 0), 0))}</td><td data-label="+ Allowances">${money(T.allow)}</td><td data-label="− Deductions">${money(T.deduct)}</td><td class="net" data-label="Net pay">${money(T.net)}</td><td class="noprint hide-sm"></td></tr>` : ''}
         </tbody>
       </table></div>
       <div class="row noprint actions-grid">
         <button class="inv" data-act="exportXlsx">Excel (.xlsx)</button>
         <button class="inv" data-act="exportPdf">PDF report</button>
         <button class="inv" data-act="payslipsAll">Payslips PDF</button>
+        <button class="inv" data-act="emailAll" ${s.mailConfigured ? '' : 'disabled'} title="${s.mailConfigured ? '' : 'Email is not set up on the server'}">Email all payslips</button>
         <button data-act="print">Print</button><button data-act="exportReport">Payroll CSV</button><button data-act="exportShifts">Shifts CSV</button>
       </div>`;
   },
@@ -477,6 +596,7 @@ const Views = {
   shifts(){
     const s = db(), a = +ui.weekStart, b = +addDays(ui.weekStart, 7), now = Date.now();
     const list = s.shifts.filter(x => x.in >= a && x.in < b && (!ui.shiftFilter || x.empId === ui.shiftFilter)).sort((x, y) => x.in - y.in);
+    const calcs = Pay.calcAll(s, now, { from: a, to: b });
     return html`${weekNav()}
       <div class="row">
         <select style="width:auto" data-change="shiftFilter" aria-label="Filter by employee">
@@ -490,13 +610,13 @@ const Views = {
       </div>
       <div class="tablewrap"><table class="stack">
         <thead><tr><th class="l">Employee</th><th class="l">Date</th><th>In</th><th>Out</th><th class="l">Breaks taken</th>
-          <th>Worked</th><th>Break taken</th><th>Break by rule</th><th>Deducted</th><th>Paid</th><th></th></tr></thead>
+          <th class="l">Paid times</th><th>Worked</th><th>Break taken</th><th>Break by rule</th><th>Deducted</th><th>Paid</th><th></th></tr></thead>
         <tbody>
-        ${list.length ? list.map(sh => { const c = Pay.shift(sh, s.settings, now); return html`<tr>
+        ${list.length ? list.map(sh => { const c = calcs.get(sh.id); return html`<tr>
           <td class="l head">${empName(sh.empId)}<span class="sm-only"> · ${fmtDay(sh.in)}</span></td><td class="l hide-sm" data-label="Date">${fmtDay(sh.in)}</td><td data-label="In">${fmtTime(sh.in)}</td>
           <td data-label="Out">${sh.out ? html`<span>${fmtTime(sh.out)}${ymd(sh.out) !== ymd(sh.in) ? html` <small>+1d</small>` : ''}</span>` : html`<span class="tag b">ON CLOCK</span>`}</td>
           <td class="l" data-label="Breaks">${sh.breaks.length ? sh.breaks.map((bk, i) => html`${i ? html`<br>` : ''}${fmtTime(bk.start)}–${bk.end ? fmtTime(bk.end) : '…'}`) : html`<span class="muted">none</span>`}</td>
-          <td data-label="Worked">${fmtHM(c.total)}</td><td class="hide-sm" data-label="Break taken">${fmtMin(c.actual)}</td><td class="hide-sm" data-label="Break by rule">${fmtMin(c.policy)}</td><td data-label="Deducted">${fmtMin(c.ded)}</td><td data-label="Paid"><b>${fmtHM(c.paid)}</b></td>
+          <td class="l" data-label="Paid times">${paidTimes(sh, c)}</td><td data-label="Worked">${fmtHM(c.total)}</td><td class="hide-sm" data-label="Break taken">${fmtMin(c.actual)}</td><td class="hide-sm" data-label="Break by rule">${fmtMin(c.policy)}</td><td data-label="Deducted">${fmtMin(c.ded)}</td><td data-label="Paid"><b>${fmtHM(c.paid)}</b></td>
           <td data-label=""><button class="sm" data-act="editShift" data-id="${sh.id}">Edit</button> <button class="sm" data-act="delShift" data-id="${sh.id}" aria-label="Delete shift">✕</button></td></tr>`; })
         : html`<tr><td class="l" colspan="11"><span class="muted">No shifts this week.</span></td></tr>`}
         </tbody>
@@ -504,14 +624,8 @@ const Views = {
   },
 
   employees(){
-    const st = db().settings, tier = num(st.tierHours);
-    return html`<form class="section" data-submit="empAdd"><h3>Add employee</h3>
-        <div class="grid">
-          <div><label for="eName">Name</label><input id="eName" name="name" required autocomplete="off"></div>
-          <div><label for="ePin">4-digit code</label><input id="ePin" name="pin" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" required autocomplete="off"></div>
-          <div><label for="eR1">Rate first ${tier}h (${st.currency}/h)</label><input id="eR1" name="rate1" type="number" step="0.01" min="0"></div>
-          <div><label for="eR2">Rate after ${tier}h (${st.currency}/h)</label><input id="eR2" name="rate2" type="number" step="0.01" min="0"></div>
-        </div>
+    return html`<form class="section" data-submit="empAdd" data-pay="hourly"><h3>Add employee</h3>
+        ${empFields({})}
         <div class="row tight"><button class="inv" type="submit">Add employee</button><button type="button" class="sm" data-act="suggestPin">Suggest a free code</button></div>
       </form>
       <div class="row">
@@ -519,23 +633,31 @@ const Views = {
         <button class="sm" data-act="togglePins">${ui.showPins ? 'Hide' : 'Show'} codes</button>
       </div>
       <div class="tablewrap"><table class="stack">
-        <thead><tr><th class="l">Name</th><th>Code</th><th>Rate first ${tier}h</th><th>Rate after ${tier}h</th><th>Paid this week</th><th class="l">Status</th><th></th></tr></thead>
+        <thead><tr><th class="l">Name</th><th>Code</th><th>Pay</th><th class="l">Contact</th><th>Paid this week</th><th class="l">Status</th><th></th></tr></thead>
         <tbody id="empRows">${Views.empRows()}</tbody>
       </table></div>`;
   },
   empRows(){
     const q = ui.empQuery.trim().toLowerCase();
     const week = new Map(Pay.week(db(), startOfWeek(new Date())).map(r => [r.e.id, r.paid]));
-    const list = db().employees.filter(e => !q || e.name.toLowerCase().includes(q))
+    const soon = new Map(Pay.upcoming(db().employees, Date.now()).map(u => [u.empId + u.kind, u]));
+    const list = db().employees.filter(e => !q || e.name.toLowerCase().includes(q) || (e.role || '').toLowerCase().includes(q))
       .sort((a, b) => (a.active === false) - (b.active === false) || a.name.localeCompare(b.name));
     if(!list.length) return html`<tr><td class="l" colspan="7"><span class="muted">${q ? 'No matches.' : 'No employees yet.'}</span></td></tr>`;
+    const pay = e => e.payType === 'salary'
+      ? (e.weeklySalary == null ? html`<b>not set</b>` : html`${money(num(e.weeklySalary))}<small>/wk</small>`)
+      : html`${rateCell(e.rate1)} / ${rateCell(e.rate2)}`;
     return html`${list.map(e => html`<tr>
-      <td class="l head">${e.name}</td><td data-label="Code">${ui.showPins ? e.pin : '••••'}</td><td data-label="Rate 1">${rateCell(e.rate1)}</td><td data-label="Rate 2">${rateCell(e.rate2)}</td>
+      <td class="l head">${e.name}${e.role ? html` <small class="muted">${e.role}</small>` : ''}
+        ${soon.get(e.id + 'birthday') ? html` <span class="tag ok" title="Birthday soon">🎂 BDAY</span>` : ''}
+        ${soon.get(e.id + 'anniversary') ? html` <span class="tag ok" title="Work anniversary soon">🎉 ${soon.get(e.id + 'anniversary').years}Y</span>` : ''}</td>
+      <td data-label="Code">${ui.showPins ? e.pin : '••••'}</td>
+      <td data-label="Pay">${pay(e)}</td>
+      <td class="l" data-label="Email">${e.email ? html`✓ ${e.email}` : html`<span class="muted">no email</span>`}${e.phone ? html`<br><small>${e.phone}</small>` : ''}</td>
       <td data-label="Paid this week">${fmtHM(week.get(e.id) ?? 0)}</td>
       <td class="l" data-label="Status">${e.active === false ? html`<span class="tag">INACTIVE</span>` : html`<span class="tag b">ACTIVE</span>`}</td>
       <td data-label=""><button class="sm" data-act="editEmp" data-id="${e.id}">Edit</button> <button class="sm" data-act="showShifts" data-id="${e.id}">Shifts</button></td></tr>`)}`;
   },
-
   audit(){
     return html`<div class="row">
         <input type="search" placeholder="Search log…" value="${ui.auditQuery}" data-input="auditSearch" style="max-width:320px" aria-label="Search audit log">
@@ -572,6 +694,13 @@ const Views = {
             ${opt('actual', st.breakMode, 'Only the actual break taken (clocked)')}
           </select>
         </div>
+        <div class="section"><h3>Pay rules (roster)</h3><div class="grid">
+          <div><label for="sRound">Round to the roster</label><select id="sRound" name="rounding"><option value="1">On</option><option value="0" ${st.rounding === false ? 'selected' : ''}>Off (pay actual times)</option></select></div>
+          <div><label for="sFrom">Rounding starts (Monday)</label><input id="sFrom" name="roundFrom" type="date" value="${st.roundFrom ?? ''}" placeholder="${ymd(addDays(startOfWeek(new Date()), 7))}"></div>
+          <div><label for="sGrace">Grace (minutes either side)</label><input id="sGrace" name="roundGraceMin" type="number" min="0" max="30" step="1" value="${st.roundGraceMin}"></div>
+          <div><label for="sStep">Round late/early in steps of</label><select id="sStep" name="roundStepMin">${[1, 5, 10, 15, 30].map(n => html`<option value="${n}" ${st.roundStepMin === n ? 'selected' : ''}>${n} min</option>`)}</select></div>
+        </div>
+        <p class="muted" style="margin:0">${st.roundFrom ? `In effect from ${fmtDay(new Date(st.roundFrom + 'T00:00'))}. Example for a 9:00 start: 9:05 → paid from 9:00 · 9:08 → paid from ${clock12(Pay.paidSpan({ in: new Date(2000, 0, 3, 9, 8).getTime(), out: new Date(2000, 0, 3, 17).getTime(), breaks: [] }, { first: true, last: false, S: new Date(2000, 0, 3, 9).getTime(), E: 0 }, st).paidIn)}` : 'Not in effect yet: pick the Monday it should start from. Earlier weeks are never re-priced.'}</p></div>
         <div class="section"><h3>Kiosk & safety</h3><div class="grid">
           <div><label for="sIdle">Kiosk auto-cancel (seconds)</label><input id="sIdle" name="kioskIdleSec" type="number" min="5" step="1" value="${st.kioskIdleSec}"></div>
           <div><label for="sAdm">Admin auto-lock (minutes)</label><input id="sAdm" name="adminTimeoutMin" type="number" min="1" step="1" value="${st.adminTimeoutMin}"></div>
@@ -597,6 +726,47 @@ const Views = {
 
 // ---------- Dialogs ----------
 const Dialogs = {
+  rosterCell(empId, day){
+    const e = empById(empId); if(!e) return;
+    ui.rosterEdit = { empId, day, entries: (db().roster[`${day}|${empId}`] || []).map(({ type, start, end }) => ({ type, start, end })) };
+    Modal.open(html`<h2 id="modalTitle">${e.name}</h2><p style="margin-top:0">${fmtDay(new Date(day + 'T00:00'))}</p>
+      <div id="rosterEntries">${Views.rosterEntries()}</div>
+      <div class="row">${['OFF', 'DELIVERY', 'BAKE', 'BAKERY YC'].map(t => html`<button type="button" class="sm" data-act="rosterPreset" data-k="${t}">${t}</button>`)}</div>
+      <form data-submit="rosterAdd">
+        <div class="grid">
+          <div><label for="rType">Shift</label><select id="rType" name="type"><option value="CAFE">Cafe</option><option value="BAKERY">Bakery</option><option value="TRAINING">Training</option></select></div>
+          <div><label for="rStart">Start</label><input id="rStart" name="start" placeholder="9.30" autocomplete="off" required></div>
+          <div><label for="rSm">Start AM/PM</label><select id="rSm" name="startM"><option>AM</option><option>PM</option></select></div>
+          <div><label for="rEnd">Finish</label><input id="rEnd" name="end" placeholder="5" autocomplete="off" required></div>
+          <div><label for="rEm">Finish AM/PM</label><select id="rEm" name="endM"><option>AM</option><option selected>PM</option></select></div>
+        </div>
+        <div class="row"><button class="inv" type="submit">Add</button><button type="button" data-act="rosterClearCell">Clear day</button><button type="button" data-act="modalCancel">Done</button></div>
+      </form>`);
+  },
+  rosterImport(preview){
+    if(!preview){
+      ui.rosterImportData = null;
+      return Modal.open(html`<h2 id="modalTitle">Import old roster</h2>
+        <div class="row"><button class="inv" data-act="rosterImportFetch">Preview from old roster app</button>
+          <label class="btn" style="margin:0">Choose JSON file<input type="file" accept=".json,application/json" class="sr" data-change="rosterImportFile"></label>
+          <button data-act="modalCancel">Cancel</button></div>`);
+    }
+    const p = preview;
+    Modal.open(html`<h2 id="modalTitle">Import preview</h2>
+      ${p.warning ? html`<p class="tag late" style="display:block;padding:8px">${p.warning}</p>` : ''}
+      <div class="tablewrap" style="box-shadow:none"><table class="stack"><tbody>
+        <tr><td class="l" data-label="Dates">${p.firstDay ?? '–'} → ${p.lastDay ?? '–'} (shifted ${p.offsetDays >= 0 ? '+' : ''}${p.offsetDays} day)</td></tr>
+        <tr><td class="l" data-label="Matched staff">${p.matched.length}</td></tr>
+        <tr><td class="l" data-label="New staff">${p.toCreate.length ? p.toCreate.map(c => c.name).join(', ') : 'none'}</td></tr>
+        <tr><td class="l" data-label="Days changed">${p.changedCells}${p.pastDayCells ? ` (${p.pastDayCells} in the past)` : ''}</td></tr>
+        <tr><td class="l" data-label="Worked shifts re-priced">${p.repricedShifts}</td></tr>
+        <tr><td class="l" data-label="Skipped">${p.skipped.length + p.ambiguous.length}</td></tr>
+      </tbody></table></div>
+      ${p.sample.length ? html`<p class="muted">${p.sample.map((l, i) => html`${i ? html`<br>` : ''}${l}`)}</p>` : ''}
+      <div class="row"><button class="inv" data-act="rosterImportApply" ${p.changedCells || p.toCreate.length ? '' : 'disabled'}>Import</button><button data-act="modalCancel">Cancel</button></div>`);
+  },
+
+
   adjust(empId){
     const e = empById(empId); if(!e) return;
     const list = db().adj[`${ymd(ui.weekStart)}|${empId}`] || [];
@@ -622,7 +792,7 @@ const Dialogs = {
     if(!s.employees.length) return Toast.show('Add an employee first', {ms:2000});
     const sh = id ? s.shifts.find(x => x.id === id) : null;
     if(id && !sh) return;
-    const sel = sh ? sh.empId : ui.shiftFilter, c = sh ? Pay.shift(sh, s.settings) : null;
+    const sel = sh ? sh.empId : ui.shiftFilter, c = sh ? Pay.calcAll(s, Date.now()).get(sh.id) : null;
     Modal.open(html`<form data-submit="shiftSave" data-id="${id || ''}">
       <h2 id="modalTitle">${sh ? 'Edit' : 'Add'} shift</h2>
       <div class="grid one"><div><label for="fEmp">Employee</label><select id="fEmp" name="empId">
@@ -633,24 +803,24 @@ const Dialogs = {
       </div>
       <div id="brows">${(sh?.breaks || []).map(b => breakRow(b))}</div>
       <div class="row"><button type="button" class="sm" data-act="addBreakRow">+ Add break</button></div>
-      ${c ? html`<p class="muted">Currently: worked ${fmtHM(c.total)} − deducted ${fmtMin(c.ded)} = paid <b>${fmtHM(c.paid)}</b></p>` : ''}
+      ${c ? html`<p class="muted">${c.roster ? html`Rostered ${c.roster.type} ${c.roster.start}–${c.roster.end} · paid ${paidTimes(sh, c)}<br>` : ''}Worked ${fmtHM(c.total)} − deducted ${fmtMin(c.ded)} = paid <b>${fmtHM(c.paid)}</b></p>` : ''}
+      <label style="display:flex;gap:8px;align-items:center;text-transform:none"><input type="checkbox" name="otApproved" style="width:auto" ${sh?.otApproved ? 'checked' : ''}> Approve overtime (pay to the actual finish)</label>
       <div class="row"><button class="inv" type="submit">Save</button><button type="button" data-act="modalCancel">Cancel</button>
         ${sh ? html`<button type="button" data-act="delShift" data-id="${sh.id}">Delete</button>` : ''}</div>
     </form>`);
   },
   emp(id){
     const e = empById(id); if(!e) return;
-    const tier = num(db().settings.tierHours), has = db().shifts.some(s => s.empId === id);
-    Modal.open(html`<form data-submit="empSave" data-id="${id}"><h2 id="modalTitle">Edit employee</h2>
-      <div class="grid two">
-        <div><label for="mName">Name</label><input id="mName" name="name" value="${e.name}" required></div>
-        <div><label for="mPin">4-digit code</label><input id="mPin" name="pin" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" value="${e.pin}" required></div>
-        <div><label for="mR1">Rate first ${tier}h</label><input id="mR1" name="rate1" type="number" step="0.01" min="0" value="${e.rate1}"></div>
-        <div><label for="mR2">Rate after ${tier}h</label><input id="mR2" name="rate2" type="number" step="0.01" min="0" value="${e.rate2}"></div>
-        <div><label for="mAct">Status</label><select id="mAct" name="active"><option value="1">Active</option><option value="0" ${e.active === false ? 'selected' : ''}>Inactive (cannot clock in)</option></select></div>
-      </div>
+    const has = db().shifts.some(s => s.empId === id);
+    Modal.open(html`<form data-submit="empSave" data-id="${id}" data-pay="${e.payType || 'hourly'}"><h2 id="modalTitle">Edit employee</h2>
+      ${empFields(e, 'm')}
+      <div class="grid one"><div><label for="mAct">Status</label><select id="mAct" name="active"><option value="1">Active</option><option value="0" ${e.active === false ? 'selected' : ''}>Inactive (cannot clock in)</option></select></div></div>
+      <h3 style="margin:8px 0">Fixed weekly allowances & deductions</h3>
+      <div id="fixedItems">${(e.fixedItems || []).map(f => fixedItemRow(f))}</div>
+      <div class="row"><button type="button" class="sm" data-act="addFixedItem">+ Add fixed item</button></div>
       <div class="row"><button class="inv" type="submit">Save</button><button type="button" data-act="modalCancel">Cancel</button>
-        ${has ? '' : html`<button type="button" data-act="delEmp" data-id="${id}">Delete</button>`}</div>    </form>`);
+        ${has ? '' : html`<button type="button" data-act="delEmp" data-id="${id}">Delete</button>`}</div>
+    </form>`);
   }
 };
 
@@ -663,6 +833,70 @@ const undoToast = msg => Toast.show(msg, { action: { label: 'Undo', act: 'undo' 
 
 // ---------- Event handlers ----------
 const Actions = {
+  emailPayslip: async (d, el) => {
+    const e = empById(d.id); if(!e) return;
+    if(!await Modal.confirm(`Email the payslip for the week of ${fmtDay(ui.weekStart)} to ${e.email}?`, { title: 'Email payslip', ok: 'Send' })) return;
+    el.disabled = true;
+    try{ showEmailResults(await api.post('/api/admin/payslips/email', { week: ymd(ui.weekStart), emp: d.id })); }
+    catch(err){ Toast.show(err.message, {ms:5000}); }
+    finally{ el.disabled = false; }
+  },
+  emailAll: async (d, el) => {
+    const week = ymd(ui.weekStart);
+    const rows = Pay.week(db(), ui.weekStart), withEmail = rows.filter(r => r.e.email).length;
+    const st = await api.get(`/api/admin/payslips/email-status?week=${week}`).catch(() => ({}));
+    const last = st.lastSent ? ` Payslips for this week were last emailed ${fmtStamp(st.lastSent)}.` : '';
+    if(!await Modal.confirm(`Email payslips for the week of ${fmtDay(ui.weekStart)} to ${withEmail} employee(s) with an email address?${last}`, { title: 'Email all payslips', ok: 'Send all' })) return;
+    el.disabled = true;
+    Toast.show('Sending payslips…', {ms:3000});
+    try{ showEmailResults(await api.post('/api/admin/payslips/email', { week, emp: 'all' })); }
+    catch(err){ Toast.show(err.message, {ms:5000}); }
+    finally{ if(el.isConnected) el.disabled = false; }
+  },
+
+  addFixedItem: () => $('#fixedItems').insertAdjacentHTML('beforeend', fixedItemRow()),
+  removeFixedItem: (d, el) => {
+    const row = el.closest('.fi'), from = row.querySelector('[name=fiFrom]').value, to = row.querySelector('[name=fiTo]');
+    const thisWeek = ymd(startOfWeek(new Date()));
+    // Already paid in earlier weeks → end it last week instead of deleting, so past payslips stay the same.
+    if(from && from < thisWeek && !to.value){ to.value = ymd(addDays(startOfWeek(new Date()), -7)); el.textContent = 'ended'; }
+    else if(!to.value) row.remove();
+  },
+
+  rosterCell: d => Dialogs.rosterCell(d.emp, d.day),
+  rosterPreset: d => saveRosterCell([...ui.rosterEdit.entries, { type: d.k }]),
+  rosterDelEntry: d => saveRosterCell(ui.rosterEdit.entries.filter((_, i) => i !== +d.i)),
+  rosterClearCell: () => saveRosterCell([]),
+  rosterPdf: () => downloadFile(`/api/admin/export/roster.pdf?${weekParam()}`),
+  rosterCopy: async () => {
+    if(!await Modal.confirm(`Copy this week onto the week of ${fmtDay(addDays(ui.weekStart, 7))}? Filled days there are replaced; empty days here leave them alone.`, { title: 'Copy roster', ok: 'Copy' })) return;
+    const r = await RemoteStore.call('post', '/api/admin/roster/copy-week', { week: ymd(ui.weekStart) });
+    if(r) undoToast(`${r.copied} days copied`);
+  },
+  rosterClear: async () => {
+    const week = ymd(ui.weekStart);
+    const dry = await api.post('/api/admin/roster/clear-week', { week, dryRun: true }).catch(() => ({ repriced: 0 }));
+    const extra = dry.repriced ? ` This changes paid times for ${dry.repriced} shift(s) already worked.` : '';
+    if(!await Modal.confirm(`Remove every roster entry in this week?${extra}`, { title: 'Clear week', ok: 'Clear', typed: 'CLEAR' })) return;
+    const r = await RemoteStore.call('post', '/api/admin/roster/clear-week', { week });
+    if(r) undoToast(`${r.cleared} entries removed`);
+  },
+  rosterImport: () => Dialogs.rosterImport(),
+  rosterImportFetch: async () => {
+    Toast.show('Fetching the old roster…', {ms:2000});
+    try{ Dialogs.rosterImport(await api.post('/api/admin/roster/import', { dryRun: true })); }
+    catch(e){ Toast.show(e.message, {ms:5000}); }
+  },
+  rosterImportApply: async () => {
+    const r = await RemoteStore.call('post', '/api/admin/roster/import', ui.rosterImportData ? { data: ui.rosterImportData } : {});
+    if(!r) return;
+    Modal.open(html`<h2 id="modalTitle">Roster imported</h2><p>${r.changedCells} days written.</p>
+      ${r.created.length ? html`<p><b>New staff kiosk codes (shown once, write them down):</b></p>
+        <div class="tablewrap" style="box-shadow:none"><table><tbody>${r.created.map(c => html`<tr><td class="l">${c.name}</td><td><b>${c.pin}</b></td></tr>`)}</tbody></table></div>` : ''}
+      <div class="row"><button class="inv" data-act="modalCancel">Done</button></div>`);
+  },
+
+
   press: d => Kiosk.press(d.k),
   punch: d => Kiosk.punch(d.k),
   kioskCancel: () => Kiosk.reset(true),
@@ -733,9 +967,9 @@ const Actions = {
   exportReport: () => {
     const rows = Pay.week(db(), ui.weekStart), tier = num(db().settings.tierHours);
     const out = [['Employee', ...DAYS.map(d => d + ' paid hrs'), 'Worked hrs', 'Break deducted hrs', 'Paid hrs',
-      `Hrs first ${tier}`, 'Rate 1', `Hrs after ${tier}`, 'Rate 2', 'Gross', 'Allowances', 'Deductions', 'Net pay']];
+      `Hrs first ${tier}`, 'Rate 1', `Hrs after ${tier}`, 'Rate 2', 'Salary', 'Allowances', 'Deductions', 'Net pay']];
     for(const r of rows) out.push([r.e.name, ...r.days.map(d => d.toFixed(2)), r.total.toFixed(2), (r.ded / 60).toFixed(2), r.paid.toFixed(2),
-      r.h1.toFixed(2), r.r1.toFixed(2), r.h2.toFixed(2), r.r2.toFixed(2), r.gross.toFixed(2), r.allow.toFixed(2), r.deduct.toFixed(2), r.net.toFixed(2)]);
+      r.h1.toFixed(2), r.r1.toFixed(2), r.h2.toFixed(2), r.r2.toFixed(2), r.salary == null ? '' : r.salary.toFixed(2), r.allow.toFixed(2), r.deduct.toFixed(2), r.net.toFixed(2)]);
     download(`payroll_${ymd(ui.weekStart)}.csv`, csvBuild(out), 'text/csv');
   },
   exportShifts: () => {
@@ -754,6 +988,25 @@ const Actions = {
 };
 
 const Changes = {
+  payType: el => { el.closest('form').dataset.pay = el.value; },
+
+  rosterImportFile: el => {
+    const file = el.files[0]; if(!file) return;
+    const fr = new FileReader();
+    fr.onload = async () => {
+      let data;
+      try{ data = JSON.parse(fr.result); }catch{ return Toast.show('That file is not JSON', {ms:2500}); }
+      try{
+        const preview = await api.post('/api/admin/roster/import', { dryRun: true, data });
+        Dialogs.rosterImport(preview);
+        ui.rosterImportData = data;
+      }catch(e){ Toast.show(e.message, {ms:5000}); }
+    };
+    fr.readAsText(file);
+    el.value = '';
+  },
+
+
   weekPick: el => { if(el.value){ ui.weekStart = startOfWeek(new Date(el.value + 'T00:00')); Admin.render(); } },
   shiftFilter: el => { ui.shiftFilter = el.value; Admin.render(); },
   importFile: el => {
@@ -779,6 +1032,14 @@ const Inputs = {
 };
 
 const Forms = {
+  rosterAdd: async fd => {
+    const time = (v, m) => parseShortTime(v, m) ?? parseShortTime(v);
+    const start = time(fd.get('start'), fd.get('startM')), end = time(fd.get('end'), fd.get('endM'));
+    if(!start || !end) return Toast.show('Enter times like 9.30 or 17:00', {ms:2500});
+    await saveRosterCell([...ui.rosterEdit.entries, { type: fd.get('type'), start, end }]);
+  },
+
+
   confirmOk: fd => {
     if(Modal.typed && fd.get('typed') !== Modal.typed) return Toast.show(`Type ${Modal.typed} exactly to confirm`, {ms:2200});
     Modal.close(true);
@@ -818,31 +1079,31 @@ const Forms = {
       if(start) breaks.push({ start, end });
     }
     // The server re-validates everything (inside shift, no overlaps, no clash) and answers 422 with the reason.
-    const body = { empId, in: tin, out: tout, breaks };
+    const body = { empId, in: tin, out: tout, breaks, otApproved: fd.get('otApproved') === 'on' };
     const ok = id ? await RemoteStore.call('put', `/api/admin/shifts/${id}`, body) : await RemoteStore.call('post', '/api/admin/shifts', body);
     if(ok){ Modal.close(true); undoToast('Shift saved'); }
   },
-  empAdd: async fd => {
-    const name = String(fd.get('name')).trim(), p = String(fd.get('pin')).trim();
-    if(!name) return Toast.show('Enter a name', {ms:1800});
-    const err = validPin(p); if(err) return Toast.show(err, {ms:2200});
-    if(await RemoteStore.call('post', '/api/admin/employees', { name, pin: p, rate1: fd.get('rate1'), rate2: fd.get('rate2'), active: true })){
-      Toast.show(`${name} added`, {ms:1500});
+  empAdd: async (fd, form) => {
+    const body = empBody(fd), err = body.name ? validPin(body.pin) : 'Enter a name';
+    if(err) return Toast.show(err, {ms:2200});
+    if(await RemoteStore.call('post', '/api/admin/employees', { ...body, active: true })){
+      Toast.show(`${body.name} added`, {ms:1500});
+      form.reset();
       $('#eName')?.focus();
     }
   },
   empSave: async (fd, form) => {
-    const id = form.dataset.id, name = String(fd.get('name')).trim(), p = String(fd.get('pin')).trim();
-    if(!name) return Toast.show('Enter a name', {ms:1800});
-    const err = validPin(p, id); if(err) return Toast.show(err, {ms:2200});
-    const body = { name, pin: p, rate1: fd.get('rate1'), rate2: fd.get('rate2'), active: fd.get('active') === '1' };
-    if(await RemoteStore.call('put', `/api/admin/employees/${id}`, body)) Modal.close(true);
+    const id = form.dataset.id, body = empBody(fd), err = body.name ? validPin(body.pin, id) : 'Enter a name';
+    if(err) return Toast.show(err, {ms:2200});
+    // PUT replaces the record, so the form always sends every field.
+    if(await RemoteStore.call('put', `/api/admin/employees/${id}`, { ...body, active: fd.get('active') === '1', fixedItems: fixedItemsFrom(fd) })) Modal.close(true);
   },
   settingsSave: async fd => {
     const rm = fd.getAll('rm');
     const breakRules = fd.getAll('rh').map((h, i) => ({ h: num(h), m: num(rm[i]) }));
     const body = { company: fd.get('company'), currency: fd.get('currency'), tierHours: fd.get('tierHours'), theme: fd.get('theme'),
-      breakMode: fd.get('breakMode'), breakRules, kioskIdleSec: fd.get('kioskIdleSec'), adminTimeoutMin: fd.get('adminTimeoutMin'), maxShiftHours: fd.get('maxShiftHours') };
+      breakMode: fd.get('breakMode'), breakRules, kioskIdleSec: fd.get('kioskIdleSec'), adminTimeoutMin: fd.get('adminTimeoutMin'), maxShiftHours: fd.get('maxShiftHours'),
+      rounding: fd.get('rounding') === '1', roundFrom: fd.get('roundFrom') || null, roundGraceMin: fd.get('roundGraceMin'), roundStepMin: Number(fd.get('roundStepMin')) };
     if(await RemoteStore.call('put', '/api/admin/settings', body)) Toast.show('Settings saved', { ms: 1500, action: { label: 'Undo', act: 'undo' } });
   },
   pinChange: async (fd, form) => {

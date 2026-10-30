@@ -14,6 +14,80 @@
   :root:not([data-theme="light"]){--ink:#ececec;--paper:#121212;--muted:#9a9a9a;--soft:#222;--warn:#ff6b7d}
 }
 :root[data-theme="dark"]{--ink:#ececec;--paper:#121212;--muted:#9a9a9a;--soft:#222;--warn:#ff6b7d}
+
+/* Admin colour system (the kiosk never uses these). One colour per tab, per roster type and per status. */
+:root{
+/* tokens:light */
+  --paper:#ffffff; --on-accent:#ffffff;
+  --c-dashboard:#1d4ed8; --c-roster:#0f766e; --c-report:#15803d; --c-shifts:#c2410c;
+  --c-employees:#6d28d9; --c-audit:#475569; --c-settings:#be123c;
+  --t-cafe-bg:#eff8f3; --t-cafe-fg:#1a5c36; --t-bakery-bg:#fce7f3; --t-bakery-fg:#9d174d;
+  --t-training-bg:#ede9fe; --t-training-fg:#5b21b6; --t-delivery-bg:#fff3e0; --t-delivery-fg:#9a4508;
+  --t-bake-bg:#fef9ee; --t-bake-fg:#92400e; --t-bkyc-bg:#fce7f3; --t-bkyc-fg:#9d174d; --t-off-bg:#e8e8e8; --t-off-fg:#4a4a4a;
+  --s-on:#15803d; --s-break:#9a4508; --s-late:#c4001a; --s-ok:#15803d;
+/* end tokens:light */
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --on-accent:#121212;
+  --c-dashboard:#93c5fd; --c-roster:#5eead4; --c-report:#86efac; --c-shifts:#fdba74;
+  --c-employees:#c4b5fd; --c-audit:#cbd5e1; --c-settings:#fda4af;
+  --t-cafe-bg:#12352a; --t-cafe-fg:#a7f3d0; --t-bakery-bg:#4a1430; --t-bakery-fg:#fbcfe8;
+  --t-training-bg:#2e1f5e; --t-training-fg:#ddd6fe; --t-delivery-bg:#43260a; --t-delivery-fg:#fed7aa;
+  --t-bake-bg:#3d2a08; --t-bake-fg:#fde68a; --t-bkyc-bg:#4a1430; --t-bkyc-fg:#fbcfe8; --t-off-bg:#2a2a2a; --t-off-fg:#d4d4d4;
+  --s-on:#86efac; --s-break:#fcd34d; --s-late:#ff6b7d; --s-ok:#86efac;
+} }
+:root[data-theme="dark"]{
+/* tokens:dark */
+  --paper:#121212; --on-accent:#121212;
+  --c-dashboard:#93c5fd; --c-roster:#5eead4; --c-report:#86efac; --c-shifts:#fdba74;
+  --c-employees:#c4b5fd; --c-audit:#cbd5e1; --c-settings:#fda4af;
+  --t-cafe-bg:#12352a; --t-cafe-fg:#a7f3d0; --t-bakery-bg:#4a1430; --t-bakery-fg:#fbcfe8;
+  --t-training-bg:#2e1f5e; --t-training-fg:#ddd6fe; --t-delivery-bg:#43260a; --t-delivery-fg:#fed7aa;
+  --t-bake-bg:#3d2a08; --t-bake-fg:#fde68a; --t-bkyc-bg:#4a1430; --t-bkyc-fg:#fbcfe8; --t-off-bg:#2a2a2a; --t-off-fg:#d4d4d4;
+  --s-on:#86efac; --s-break:#fcd34d; --s-late:#ff6b7d; --s-ok:#86efac;
+/* end tokens:dark */
+}
+#app.admin{--accent:var(--c-dashboard)}
+#app.admin[data-tab="dashboard"]{--accent:var(--c-dashboard)}
+#app.admin[data-tab="roster"]{--accent:var(--c-roster)}
+#app.admin[data-tab="report"]{--accent:var(--c-report)}
+#app.admin[data-tab="shifts"]{--accent:var(--c-shifts)}
+#app.admin[data-tab="employees"]{--accent:var(--c-employees)}
+#app.admin[data-tab="audit"]{--accent:var(--c-audit)}
+#app.admin[data-tab="settings"]{--accent:var(--c-settings)}
+#app.admin .bar{border-bottom-color:var(--accent)}
+#app.admin .brand::before{background:var(--accent)}
+#app.admin .tabs button{border-bottom:6px solid var(--tab)}
+#app.admin .tabs button.on{background:var(--tab);color:var(--on-accent)}
+#app.admin .tabs{border-bottom-color:var(--accent)}
+#app.admin th{background:var(--accent);color:var(--on-accent)}
+#app.admin th .thbtn:focus-visible{outline-color:var(--on-accent)}
+#app.admin .section h3{border-left:8px solid var(--accent);padding-left:10px}
+#app.admin .kpi{border-top:8px solid var(--accent)}
+#app.admin button.inv{background:var(--accent);color:var(--on-accent)}
+#app.admin .tag.on{border-color:var(--s-on);color:var(--s-on)}
+#app.admin .tag.brk{border-color:var(--s-break);color:var(--s-break)}
+#app.admin .tag.late{border-color:var(--s-late);color:var(--s-late)}
+#app.admin .tag.ok{border-color:var(--s-ok);color:var(--s-ok)}
+form[data-pay="hourly"] .pay-salary,form[data-pay="salary"] .pay-hourly{display:none}
+.roster-wrap{overflow-x:auto}
+.roster-grid{border-collapse:separate;border-spacing:0;min-width:760px}
+.roster-grid th,.roster-grid td{border:0;border-right:1px solid var(--ink);border-bottom:1px solid var(--ink);text-align:center;vertical-align:top;padding:4px;white-space:normal}
+.roster-grid .rname{position:-webkit-sticky;position:sticky;left:0;z-index:2;background:var(--paper);text-align:left;font-weight:700;min-width:100px;max-width:130px}
+.roster-grid th.rname{z-index:3;background:var(--accent,var(--ink));color:var(--on-accent,var(--paper))}
+.roster-grid .rcell{cursor:pointer;min-width:92px}
+.roster-grid .rcell:hover{background:var(--soft)}
+.roster-grid .today{box-shadow:inset 0 0 0 3px var(--accent,var(--ink))}
+.roster-grid tfoot td{font-weight:700;background:var(--soft)}
+.roster-grid tfoot .rname{background:var(--soft)}
+.chip{display:block;font-size:11px;font-weight:700;padding:3px 5px;margin:2px 0;border:2px solid var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip.t-CAFE{background:var(--t-cafe-bg);color:var(--t-cafe-fg)}
+.chip.t-BAKERY{background:var(--t-bakery-bg);color:var(--t-bakery-fg)}
+.chip.t-TRAINING{background:var(--t-training-bg);color:var(--t-training-fg)}
+.chip.t-DELIVERY{background:var(--t-delivery-bg);color:var(--t-delivery-fg)}
+.chip.t-BAKE{background:var(--t-bake-bg);color:var(--t-bake-fg)}
+.chip.t-BKYC{background:var(--t-bkyc-bg);color:var(--t-bkyc-fg)}
+.chip.t-OFF{background:var(--t-off-bg);color:var(--t-off-fg)}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--paper);color:var(--ink);font-family:'Space Mono',ui-monospace,Consolas,monospace;font-size:15px}
 button,.btn{font:inherit;cursor:pointer;background:var(--paper);color:var(--ink);border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);padding:10px 16px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-radius:0;display:inline-block;font-size:15px;margin:0}

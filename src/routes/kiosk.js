@@ -1,8 +1,8 @@
 // Public kiosk API. Responses only ever describe the employee who typed their own code.
 import { Router } from 'express';
-import { getSettings, findEmployeeByPin, listShifts, addAudit, loadData } from '../repo.js';
+import { getSettings, findEmployeeByPin, addAudit, loadData } from '../repo.js';
 import { punch } from '../punch.js';
-import { week, shift as calcShift } from '../shared/pay.js';
+import { week, calcAll } from '../shared/pay.js';
 import { startOfWeek, ymd } from '../shared/format.js';
 
 export function kioskRoutes({ db, clock, lockouts }){
@@ -41,9 +41,12 @@ export function kioskRoutes({ db, clock, lockouts }){
     if(!emp) return;
     const now = clock(), data = loadData(db), today = ymd(now);
     const open = data.shifts.find(s => s.empId === emp.id && s.out == null);
-    const todayPaid = listShifts(db, { empId: emp.id }).filter(s => ymd(s.in) === today).reduce((a, s) => a + calcShift(s, data.settings, now).paid, 0);
+    const calcs = calcAll(data, now);
+    const todayPaid = data.shifts.filter(s => s.empId === emp.id && ymd(s.in) === today).reduce((a, s) => a + calcs.get(s.id).paid, 0);
     const weekPaid = week(data, startOfWeek(now), now).find(row => row.e.id === emp.id)?.paid ?? 0;
-    res.json({ employee: { id: emp.id, name: emp.name }, shift: open ? { in: open.in, breaks: open.breaks } : null, todayPaid, weekPaid });
+    // Only this employee's entries for today.
+    const roster = (data.roster[`${today}|${emp.id}`] || []).map(({ type, start, end }) => ({ type, start, end }));
+    res.json({ employee: { id: emp.id, name: emp.name }, shift: open ? { in: open.in, breaks: open.breaks } : null, todayPaid, weekPaid, roster });
   });
 
   r.post('/punch', (req, res) => {

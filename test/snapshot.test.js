@@ -7,6 +7,7 @@ import { d, memDb } from './helpers.js';
 import { openDb, migrate } from '../src/db.js';
 import { createEmployee } from '../src/repo.js';
 import { snapshot, prune } from '../src/snapshot.js';
+import { migrations } from '../src/migrations.js';
 
 const tmp = t => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tc-snap-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; };
 
@@ -19,7 +20,7 @@ test('snapshot opens and migrates cleanly; same day overwrites', (t) => {
   assert.equal(path.basename(file), 'timeclock-2026-10-30.db');
   const copy = openDb(file); migrate(copy);
   assert.equal(copy.get('SELECT COUNT(*) n FROM employees').n, 1);
-  assert.equal(copy.get('PRAGMA user_version').user_version, 1);
+  assert.equal(copy.get('PRAGMA user_version').user_version, migrations.length);
   copy.close();
   snapshot(db, out, d(2026, 10, 30, 18));
   assert.deepEqual(fs.readdirSync(out).filter(f => f.endsWith('.db')), ['timeclock-2026-10-30.db']);
@@ -40,4 +41,20 @@ test('prune keeps the newest N dated files and leaves others alone', (t) => {
 
 test('memory db → null', () => {
   assert.equal(snapshot(memDb(), os.tmpdir(), Date.now()), null);
+});
+
+test('pre-migration snapshot is taken next to the DB and never pruned', async (t) => {
+  const { snapshotBeforeMigrate } = await import('../src/snapshot.js');
+  const { pendingMigrations } = await import('../src/db.js');
+  const dir = tmp(t);
+  const db = openDb(path.join(dir, 'live.db'));
+  migrate(db, migrations.slice(0, 1));
+  assert.equal(pendingMigrations(db), migrations.length - 1);
+  const file = snapshotBeforeMigrate(db, d(2026, 10, 30, 9, 15));
+  assert.equal(path.dirname(file), dir);
+  assert.match(path.basename(file), /^timeclock-premigrate-v1-2026-10-30-091500\.db$/);
+  assert.ok(fs.existsSync(file));
+  prune(dir, 0);
+  assert.ok(fs.existsSync(file));
+  db.close();
 });
