@@ -11,5 +11,7 @@ export function loadConfig(env = process.env) {
     dbPath: env.DB_PATH || path.join(ROOT, 'data', 'timeclock.db'),
     backupDir: env.BACKUP_DIR || path.join(ROOT, 'data', 'backups'),
     backupKeep: Number(env.BACKUP_KEEP) || 14,
+    // Number of reverse proxies in front of the app (1 on Railway); false when serving directly.
+    trustProxy: Number(env.TRUST_PROXY) || false,
   };
 }

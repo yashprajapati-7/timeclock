@@ -21,7 +21,7 @@ function backupNow(){
 backupNow();
 setInterval(backupNow, 24 * 3600 * 1000).unref();
 
-const server = createApp({ db }).listen(config.port, config.host, () => {
+const server = createApp({ db, trustProxy: config.trustProxy }).listen(config.port, config.host, () => {
   console.log(`Time Clock running at http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}`);
   console.log(`Database: ${config.dbPath}`);
 });

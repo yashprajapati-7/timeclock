@@ -11,6 +11,9 @@ export async function ensureAdminPin(db, now = Date.now()){
   addAudit(db, { ts: now, actor: 'System', action: 'Admin PIN secured' });
 }
 
+// Secure whenever the request came in over HTTPS (directly or via a trusted proxy).
+const cookieOptions = req => ({ httpOnly: true, sameSite: 'strict', path: '/', secure: req.secure });
+
 export function requireAdmin({ db, clock }){
   return (req, res, next) => {
     const token = parseCookies(req.get('cookie'))[COOKIE];
@@ -44,7 +47,7 @@ export function authRoutes(ctx){
     }
     lockouts.admin.reset(ip);
     if(needsRehash(st.adminPinHash)) setSettings(db, { adminPinHash: await hashPin(pin) });
-    res.cookie(COOKIE, createSession(db, clock()), { httpOnly: true, sameSite: 'strict', path: '/' });
+    res.cookie(COOKIE, createSession(db, clock()), cookieOptions(req));
     audit('Admin', 'Admin login');
     res.json({ defaultPin: st.defaultPin, adminTimeoutMin: st.adminTimeoutMin });
   });
@@ -55,7 +58,7 @@ export function authRoutes(ctx){
     destroySession(db, req.session.token);
     undo.clear(req.session.key);
     audit('Admin', 'Admin logout');
-    res.clearCookie(COOKIE, { httpOnly: true, sameSite: 'strict', path: '/' });
+    res.clearCookie(COOKIE, cookieOptions(req));
     res.json({ ok: true });
   });
 

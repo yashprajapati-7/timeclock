@@ -18,7 +18,7 @@ function requireJson(req, res, next){
   next();
 }
 
-export function createApp({ db, clock = Date.now }){
+export function createApp({ db, clock = Date.now, trustProxy = false }){
   const ctx = {
     db, clock,
     lockouts: { admin: createLockout({ max: 5, ms: 60000, clock }), kiosk: createLockout({ max: 5, ms: 30000, clock }) },
@@ -26,6 +26,8 @@ export function createApp({ db, clock = Date.now }){
   };
   const app = express();
   app.disable('x-powered-by');
+  // Behind a proxy, req.ip / req.secure must come from X-Forwarded-* so lockouts are per client and cookies Secure on HTTPS.
+  app.set('trust proxy', trustProxy);
   app.use((req, res, next) => {
     res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin' });
     next();
