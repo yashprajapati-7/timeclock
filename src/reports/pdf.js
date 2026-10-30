@@ -114,6 +114,17 @@ export function timesheetRow(s){
     fmtHM(c.total), fmtMin(c.ded), fmtHM(c.paid)];
 }
 
+// Payslip timesheet: one line per day Mon–Sun (each shift on its own line), with the roster, OFF and no-shows shown.
+export function payslipDays(r, report){
+  return report.weekDays.flatMap((day, i) => {
+    const name = `${DAYS[i]} ${day.slice(8)}/${day.slice(5, 7)}`, entries = r.roster?.[i] ?? [];
+    const planned = entries.map(rosterLabel).join(', ') || '—', shifts = r.shifts.filter(s => s.date === day);
+    if(shifts.length) return shifts.map(s => [name, planned, ...timesheetRow(s).slice(1)]);
+    const off = entries.length && entries.every(e => e.type === 'OFF'), timed = entries.some(e => e.start);
+    return [[name, planned, off ? 'OFF' : timed ? 'ABSENT' : '—', '', '', '', '', '', '']];
+  });
+}
+
 export function payrollPdf(report, opts = {}){
   const doc = newDoc(`Weekly payroll ${report.weekStart}`, { ...opts, layout: 'landscape' });
   header(doc, report, 'Weekly payroll');
@@ -149,9 +160,9 @@ export function payslipsPdf(report, empIds = 'all', opts = {}){
       { fontSize: 9, bold: new Set([summary.length]) });
     doc.moveDown(0.5);
     table(doc, [
-      { label: 'Date', width: 64 }, { label: 'In', width: 38 }, { label: 'Out', width: 50 }, { label: 'Paid time', width: 110 },
-      { label: 'Breaks', width: 84 }, { label: 'Worked', width: 50, align: R }, { label: 'Deducted', width: 54, align: R }, { label: 'Paid', width: 50, align: R },
-    ], r.shifts.map(timesheetRow), { fontSize: 8 });
+      { label: 'Day', width: 56 }, { label: 'Roster', width: 76 }, { label: 'In', width: 38 }, { label: 'Out', width: 44 }, { label: 'Paid time', width: 96 },
+      { label: 'Breaks', width: 62 }, { label: 'Worked', width: 46, align: R }, { label: 'Deducted', width: 48, align: R }, { label: 'Paid', width: 46, align: R },
+    ], payslipDays(r, report), { fontSize: 8 });
     doc.moveDown(3);
     const y = doc.y;
     doc.moveTo(x, y).lineTo(x + 200, y).lineWidth(0.8).stroke();

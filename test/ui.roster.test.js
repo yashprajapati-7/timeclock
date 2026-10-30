@@ -52,3 +52,11 @@ test('shifts, dashboard, settings, kiosk', () => {
   has('name="roundGraceMin"');
   has('Rostered today');
 });
+
+test('roster day editor saves only on Save; late check can be started from the roster page', () => {
+  has('data-act="rosterSave"');
+  has('function editRosterDraft');
+  has('data-act="rosterStartLate"');
+  has('LATE CHECK ON');
+  assert.doesNotMatch(js, /rosterPreset: d => saveRosterCell/);
+});

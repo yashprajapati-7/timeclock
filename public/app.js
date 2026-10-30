@@ -408,7 +408,12 @@ async function saveRosterCell(entries){
     if(!dry) return;
     if(dry.repriced && !await Modal.confirm(`This changes paid times for ${dry.repriced} shift(s) already worked on or around this day.`, { title: 'Change a past roster day?', ok: 'Change' })) return;
   }
-  if(await RemoteStore.call('put', path, { entries })) Dialogs.rosterCell(empId, day);
+  if(await RemoteStore.call('put', path, { entries })){ Modal.close(true); Toast.show('Roster saved', {ms:1800}); }
+}
+// Day editor changes stay local until Save.
+function editRosterDraft(entries){
+  ui.rosterEdit.entries = entries;
+  const box = $('#rosterEntries'); if(box) box.innerHTML = Views.rosterEntries();
 }
 
 // Employee form fields shared by "Add employee" and the edit dialog. data-pay on the form shows hourly or salary inputs.
@@ -523,6 +528,11 @@ const Views = {
         <button data-act="rosterImport">Import old roster</button>
         <button data-act="rosterClear">Clear week</button>
       </div>
+      ${s.settings.rounding !== false && s.settings.roundFrom
+        ? html`<p class="tag ok" style="display:block;padding:8px 10px;margin:0 0 14px">✓ LATE CHECK ON since ${fmtDay(new Date(s.settings.roundFrom + 'T00:00'))} · clock-ins are compared with this roster</p>`
+        : html`<div class="row" style="padding:10px;border:2px solid var(--s-late);background:var(--s-late-bg);border-radius:8px">
+            <span><b>Late check is off.</b> Clock-ins are not compared with the roster yet, so nobody is marked late.</span>
+            <button class="inv" data-act="rosterStartLate">Save roster &amp; start late check</button></div>`}
       <div class="tablewrap roster-wrap"><table class="roster-grid">
         <thead><tr><th class="rname">Staff</th>${w.days.map((dd, i) => html`<th class="${dd === today ? 'today' : ''}">${DAYS[i]}<br><small>${dd.slice(8)}/${dd.slice(5, 7)}</small></th>`)}<th>Hrs</th></tr></thead>
         <tbody>${w.rows.length ? w.rows.map(r => html`<tr><td class="rname">${r.name}</td>
@@ -725,8 +735,9 @@ const Dialogs = {
           <div><label for="rEnd">Finish</label><input id="rEnd" name="end" placeholder="5" autocomplete="off" required></div>
           <div><label for="rEm">Finish AM/PM</label><select id="rEm" name="endM"><option>AM</option><option selected>PM</option></select></div>
         </div>
-        <div class="row"><button class="inv" type="submit">Add</button><button type="button" data-act="rosterClearCell">Clear day</button><button type="button" data-act="modalCancel">Done</button></div>
-      </form>`);
+        <div class="row"><button type="submit">+ Add shift</button><button type="button" data-act="rosterClearCell">Clear day</button></div>
+      </form>
+      <div class="row"><button class="inv" type="button" data-act="rosterSave">Save</button><button type="button" data-act="modalCancel">Cancel</button></div>`);
   },
   rosterImport(preview){
     if(!preview){
@@ -852,9 +863,25 @@ const Actions = {
   },
 
   rosterCell: d => Dialogs.rosterCell(d.emp, d.day),
-  rosterPreset: d => saveRosterCell([...ui.rosterEdit.entries, { type: d.k }]),
-  rosterDelEntry: d => saveRosterCell(ui.rosterEdit.entries.filter((_, i) => i !== +d.i)),
-  rosterClearCell: () => saveRosterCell([]),
+  rosterPreset: d => editRosterDraft([...ui.rosterEdit.entries, { type: d.k }]),
+  rosterDelEntry: d => editRosterDraft(ui.rosterEdit.entries.filter((_, i) => i !== +d.i)),
+  rosterClearCell: () => editRosterDraft([]),
+  rosterSave: () => {
+    // A time typed but not yet added with "+ Add shift" is saved too.
+    const st = $('#rStart')?.value.trim(), en = $('#rEnd')?.value.trim(), entries = [...ui.rosterEdit.entries];
+    if(st || en){
+      const time = (v, m) => parseShortTime(v, m) ?? parseShortTime(v);
+      const start = time(st, $('#rSm').value), end = time(en, $('#rEm').value);
+      if(!start || !end) return Toast.show('Enter times like 9.30 or 17:00', {ms:2500});
+      entries.push({ type: $('#rType').value, start, end });
+    }
+    return saveRosterCell(entries);
+  },
+  rosterStartLate: async () => {
+    const from = ymd(startOfWeek(new Date()));
+    if(!await Modal.confirm(`From ${fmtDay(new Date(from + 'T00:00'))} clock-ins are checked against this roster: up to 6 min late is paid from the rostered start, later rounds up to the next 15 min and is marked LATE.`, { title: 'Start late check', ok: 'Start' })) return;
+    if(await RemoteStore.call('put', '/api/admin/settings', { rounding: true, roundFrom: from })) Toast.show('Late check is on', {ms:2000});
+  },
   rosterPdf: () => downloadFile(`/api/admin/export/roster.pdf?${weekParam()}`),
   rosterCopy: async () => {
     const week = ymd(ui.weekStart);
@@ -1034,7 +1061,8 @@ const Forms = {
     const time = (v, m) => parseShortTime(v, m) ?? parseShortTime(v);
     const start = time(fd.get('start'), fd.get('startM')), end = time(fd.get('end'), fd.get('endM'));
     if(!start || !end) return Toast.show('Enter times like 9.30 or 17:00', {ms:2500});
-    await saveRosterCell([...ui.rosterEdit.entries, { type: fd.get('type'), start, end }]);
+    editRosterDraft([...ui.rosterEdit.entries, { type: fd.get('type'), start, end }]);
+    $('#rStart').value = ''; $('#rEnd').value = '';
   },
 
 

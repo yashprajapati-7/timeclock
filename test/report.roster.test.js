@@ -6,7 +6,7 @@ import { d, memDb } from './helpers.js';
 import * as R from '../src/repo.js';
 import { buildWeekReport } from '../src/reports/model.js';
 import { payrollWorkbook, PAYROLL_HEADER } from '../src/reports/xlsx.js';
-import { payrollLine, payslipSummary, timesheetRow, payrollPdf, payslipsPdf } from '../src/reports/pdf.js';
+import { payrollLine, payslipSummary, timesheetRow, payslipDays, payrollPdf, payslipsPdf } from '../src/reports/pdf.js';
 
 const NOW = d(2026, 10, 30, 20);
 function report(){
@@ -91,4 +91,25 @@ test('roster PDF: cell labels like the old app, valid PDF, route 200/400/401', a
   assert.equal(ok.status, 200);
   assert.equal(ok.headers['content-type'], 'application/pdf');
   assert.equal((await ag.get('/api/admin/export/roster.pdf?week=bad')).status, 400);
+});
+
+test('payslip timesheet lists all 7 days: worked, OFF, rostered but absent, nothing', () => {
+  const db = memDb();
+  R.setSettings(db, { roundFrom: '2026-10-26', breakMode: 'policy' });
+  R.createEmployee(db, { id: 'bob', name: 'Bob', pin: '2222', rate1: 20, rate2: 30, active: true }, 0);
+  R.replaceRosterCell(db, 'bob', '2026-10-27', [{ type: 'CAFE', start: '09:00', end: '17:00' }]);
+  R.replaceRosterCell(db, 'bob', '2026-10-28', [{ type: 'OFF' }]);
+  R.replaceRosterCell(db, 'bob', '2026-10-29', [{ type: 'BAKERY', start: '05:00', end: '13:00' }]);
+  R.saveShift(db, { id: 'b1', empId: 'bob', in: d(2026, 10, 27, 9, 8), out: d(2026, 10, 27, 17), breaks: [] });
+  const rep = buildWeekReport(R.loadData(db), d(2026, 10, 26), NOW);
+  const rows = payslipDays(rep.rows[0], rep);
+  assert.equal(rows.length, 7);
+  assert.match(rows[0][0], /^Mon 26\/10/);
+  assert.equal(rows[0][1], '—');
+  assert.equal(rows[1][1], '9A–5P');
+  assert.equal(rows[1][2], '09:08');
+  assert.match(rows[1][4], /LATE/);
+  assert.equal(rows[2][1], 'OFF');
+  assert.equal(rows[2][2], 'OFF');
+  assert.equal(rows[3][2], 'ABSENT');
 });
