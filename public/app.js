@@ -189,11 +189,7 @@ function timeline(ws, empFilter){
 const app = $('#app');
 const ui = { view: 'kiosk', tab: 'dashboard', weekStart: startOfWeek(new Date()), shiftFilter: '', empQuery: '', auditQuery: '', auditRows: [], sort: { k: 'name', dir: 1 }, showPins: false };
 
-function applyTheme(){
-  const t = (ui.view === 'admin' ? db()?.settings.theme : Kiosk.info?.theme) ?? 'auto';
-  if(t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
-  else delete document.documentElement.dataset.theme;
-}
+function applyTheme(){ document.documentElement.dataset.theme = 'light'; }   // one light theme everywhere
 function render(){ applyTheme(); ui.view === 'kiosk' ? Kiosk.render() : Admin.render(); }
 function tickLive(now = Date.now()){
   $$('[data-elapsed]').forEach(el => el.textContent = fmtElapsed(now - +el.dataset.elapsed));
@@ -359,10 +355,9 @@ const Admin = {
       <header class="bar noprint"><div class="brand">${s.settings.company}<span class="hide-sm"> · Admin</span></div>
         <div class="row tight">
           ${undoLabel ? html`<button class="sm" data-act="undo" title="Undo: ${undoLabel}" aria-label="Undo ${undoLabel}">↶<span class="hide-sm"> Undo ${trunc(undoLabel, 18)}</span></button>` : ''}
-          <button class="sm" data-act="themeCycle" title="Theme: ${s.settings.theme}" aria-label="Switch theme">◐<span class="hide-sm"> ${s.settings.theme}</span></button>
           <button class="sm inv" data-act="logout">Lock<span class="hide-sm"> · Back to clock</span></button>
         </div></header>
-      <nav class="tabs noprint" role="tablist">${Admin.tabs.map(([k, l]) => html`<button role="tab" aria-selected="${ui.tab === k}" class="${ui.tab === k ? 'on' : ''}" style="--tab:var(--c-${k})" data-act="tab" data-k="${k}">${l}${k === 'dashboard' && alerts ? html` <span class="badge" aria-label="${alerts} alerts">${alerts}</span>` : ''}</button>`)}</nav>
+      <nav class="tabs noprint" role="tablist">${Admin.tabs.map(([k, l]) => html`<button role="tab" aria-selected="${ui.tab === k}" class="${ui.tab === k ? 'on' : ''}" style="--tab:var(--c-${k});--tab-soft:var(--c-${k}-soft)" data-act="tab" data-k="${k}">${l}${k === 'dashboard' && alerts ? html` <span class="badge" aria-label="${alerts} alerts">${alerts}</span>` : ''}</button>`)}</nav>
       <main class="wrap">${Views[ui.tab]()}</main>`;
     tickLive();
   },
@@ -422,10 +417,9 @@ function empFields(e, p = 'e'){
   return html`<div class="grid">
     <div><label for="${p}Name">Name</label><input id="${p}Name" name="name" value="${v(e.name)}" required autocomplete="off"></div>
     <div><label for="${p}Pin">4-digit code</label><input id="${p}Pin" name="pin" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" value="${v(e.pin)}" required autocomplete="off"></div>
-    <div><label for="${p}Role">Role</label><input id="${p}Role" name="role" maxlength="40" value="${v(e.role)}" placeholder="e.g. Barista"></div>
     <div><label for="${p}Pay">Pay type</label><select id="${p}Pay" name="payType" data-change="payType">
-      <option value="hourly">Hourly rate</option><option value="salary" ${e.payType === 'salary' ? 'selected' : ''}>Fixed weekly salary</option></select></div>
-    <div class="pay-hourly"><label for="${p}R1">Rate first ${tier}h (${st.currency}/h)</label><input id="${p}R1" name="rate1" type="number" step="0.01" min="0" value="${v(e.rate1)}"></div>
+      <option value="hourly">Hourly (two rates)</option><option value="fixed" ${e.payType === 'fixed' ? 'selected' : ''}>Fixed rate (same for all hours)</option><option value="salary" ${e.payType === 'salary' ? 'selected' : ''}>Fixed weekly salary</option></select></div>
+    <div class="pay-hourly pay-fixed"><label for="${p}R1"><span class="pay-hourly">Rate first ${tier}h</span><span class="pay-fixed">Rate, all hours</span> (${st.currency}/h)</label><input id="${p}R1" name="rate1" type="number" step="0.01" min="0" value="${v(e.rate1)}"></div>
     <div class="pay-hourly"><label for="${p}R2">Rate after ${tier}h (${st.currency}/h)</label><input id="${p}R2" name="rate2" type="number" step="0.01" min="0" value="${v(e.rate2)}"></div>
     <div class="pay-salary"><label for="${p}Sal">Weekly salary (${st.currency})</label><input id="${p}Sal" name="weeklySalary" type="number" step="0.01" min="0" value="${v(e.weeklySalary)}"></div>
     <div><label for="${p}Mail">Email (for payslips)</label><input id="${p}Mail" name="email" type="email" value="${v(e.email)}" autocomplete="off"></div>
@@ -435,9 +429,9 @@ function empFields(e, p = 'e'){
   </div>`;
 }
 const empBody = fd => {
-  const payType = fd.get('payType') === 'salary' ? 'salary' : 'hourly';
-  return { name: String(fd.get('name')).trim(), pin: String(fd.get('pin')).trim(), role: String(fd.get('role') ?? '').trim(), payType,
-    rate1: fd.get('rate1'), rate2: fd.get('rate2'), weeklySalary: payType === 'salary' ? fd.get('weeklySalary') : null,
+  const payType = ['salary', 'fixed'].includes(fd.get('payType')) ? fd.get('payType') : 'hourly';
+  return { name: String(fd.get('name')).trim(), pin: String(fd.get('pin')).trim(), payType,
+    rate1: fd.get('rate1'), rate2: payType === 'fixed' ? fd.get('rate1') : fd.get('rate2'), weeklySalary: payType === 'salary' ? fd.get('weeklySalary') : null,
     email: String(fd.get('email') ?? '').trim(), phone: String(fd.get('phone') ?? '').trim(),
     birthday: fd.get('birthday') || null, startDate: fd.get('startDate') || null };
 };
@@ -564,12 +558,14 @@ const Views = {
     return html`${weekNav()}
       <h2 class="title">Weekly hours & pay · ${fmtDay(ui.weekStart)} – ${fmtDay(end)} ${end.getFullYear()}</h2>
       <div class="tablewrap"><table class="stack">
-        <thead><tr>${th('name', 'Employee', 'l')}${DAYS.map(d => html`<th>${d}</th>`)}${th('total', 'Worked')}<th>Break</th>${th('paid', 'Paid hrs')}
+        <thead><tr>${th('name', 'Employee', 'l')}${ui.showDays ? DAYS.map((d, i) => html`<th>${i ? d : html`<button class="thbtn" data-act="toggleDays" title="Hide days">◂ ${d}</button>`}</th>`)
+            : html`<th><button class="thbtn" data-act="toggleDays" title="Show every day">Week ▸</button></th>`}${th('total', 'Worked')}<th>Break</th>${th('paid', 'Paid hrs')}
           <th>First ${tier}h</th><th>After ${tier}h</th><th>Salary</th><th>+ Allow.</th><th>− Deduct.</th>${th('net', 'Net pay')}<th class="noprint"></th></tr></thead>
         <tbody>
         ${rows.length ? rows.map(r => html`<tr>
           <td class="l head"><a href="#" class="lnk" style="color:inherit;font-weight:700" data-act="showShifts" data-id="${r.e.id}">${r.e.name}</a>${r.open ? html` <span class="tag b">ON</span>` : ''}${r.late ? html` <span class="tag late" title="${r.lateMin} min late in total">LATE×${r.late}</span>` : ''}</td>
-          ${r.days.map((d, i) => html`<td class="d" data-label="${DAYS[i]}">${d ? fmtHM(d) : html`<span class="muted">–</span>`}</td>`)}
+          ${ui.showDays ? r.days.map((d, i) => html`<td class="d" data-label="${DAYS[i]}">${d ? fmtHM(d) : html`<span class="muted">–</span>`}</td>`)
+            : html`<td class="d hide-sm" data-label="Week">${r.days.filter(Boolean).length} day${r.days.filter(Boolean).length === 1 ? '' : 's'}</td>`}
           <td data-label="Worked">${fmtHM(r.total)}</td><td data-label="Break">${fmtMin(r.ded)}</td><td data-label="Paid hrs"><b>${fmtHM(r.paid)}</b><br class="hide-sm"><small class="hide-sm">${r.paid.toFixed(2)}h</small></td>
           <td data-label="First ${tier}h"><span>${r.h1.toFixed(2)}h × ${r.r1 ? money(r.r1) : html`<b>?</b>`}<br><small>${money(r.p1)}</small></span></td>
           <td data-label="After ${tier}h"><span>${r.h2.toFixed(2)}h × ${r.r2 ? money(r.r2) : html`<b>?</b>`}<br><small>${money(r.p2)}</small></span></td>
@@ -579,7 +575,7 @@ const Views = {
             <button class="sm" data-act="emailPayslip" data-id="${r.e.id}" ${s.mailConfigured && r.e.email ? '' : 'disabled'}
               title="${!s.mailConfigured ? 'Email is not set up on the server' : r.e.email ? 'Email payslip to ' + r.e.email : 'No email address'}">Email</button></td></tr>`)
           : html`<tr><td class="l" colspan="19"><span class="muted">No employees yet.</span></td></tr>`}
-        ${rows.length ? html`<tr class="tot"><td class="l head">TOTAL</td>${T.days.map((d, i) => html`<td class="d" data-label="${DAYS[i]}">${fmtHM(d)}</td>`)}
+        ${rows.length ? html`<tr class="tot"><td class="l head">TOTAL</td>${ui.showDays ? T.days.map((d, i) => html`<td class="d" data-label="${DAYS[i]}">${fmtHM(d)}</td>`) : html`<td class="d hide-sm" data-label="Week"></td>`}
           <td data-label="Worked">${fmtHM(T.total)}</td><td data-label="Break">${fmtMin(T.ded)}</td><td data-label="Paid hrs">${fmtHM(T.paid)}</td><td data-label="First ${tier}h"><span>${T.h1.toFixed(2)}h<br><small>${money(T.p1)}</small></span></td>
           <td data-label="After ${tier}h"><span>${T.h2.toFixed(2)}h<br><small>${money(T.p2)}</small></span></td><td data-label="Salary">${money(rows.reduce((a, r) => a + (r.salary ?? 0), 0))}</td><td data-label="+ Allowances">${money(T.allow)}</td><td data-label="− Deductions">${money(T.deduct)}</td><td class="net" data-label="Net pay">${money(T.net)}</td><td class="noprint hide-sm"></td></tr>` : ''}
         </tbody>
@@ -618,7 +614,7 @@ const Views = {
           <td class="l" data-label="Breaks">${sh.breaks.length ? sh.breaks.map((bk, i) => html`${i ? html`<br>` : ''}${fmtTime(bk.start)}–${bk.end ? fmtTime(bk.end) : '…'}`) : html`<span class="muted">none</span>`}</td>
           <td class="l" data-label="Paid times">${paidTimes(sh, c)}</td><td data-label="Worked">${fmtHM(c.total)}</td><td class="hide-sm" data-label="Break taken">${fmtMin(c.actual)}</td><td class="hide-sm" data-label="Break by rule">${fmtMin(c.policy)}</td><td data-label="Deducted">${fmtMin(c.ded)}</td><td data-label="Paid"><b>${fmtHM(c.paid)}</b></td>
           <td data-label=""><button class="sm" data-act="editShift" data-id="${sh.id}">Edit</button> <button class="sm" data-act="delShift" data-id="${sh.id}" aria-label="Delete shift">✕</button></td></tr>`; })
-        : html`<tr><td class="l" colspan="11"><span class="muted">No shifts this week.</span></td></tr>`}
+        : html`<tr><td class="l" colspan="12"><span class="muted">No shifts this week.</span></td></tr>`}
         </tbody>
       </table></div>`;
   },
@@ -646,9 +642,9 @@ const Views = {
     if(!list.length) return html`<tr><td class="l" colspan="7"><span class="muted">${q ? 'No matches.' : 'No employees yet.'}</span></td></tr>`;
     const pay = e => e.payType === 'salary'
       ? (e.weeklySalary == null ? html`<b>not set</b>` : html`${money(num(e.weeklySalary))}<small>/wk</small>`)
-      : html`${rateCell(e.rate1)} / ${rateCell(e.rate2)}`;
+      : e.payType === 'fixed' ? html`${rateCell(e.rate1)} <small>all hours</small>` : html`${rateCell(e.rate1)} / ${rateCell(e.rate2)}`;
     return html`${list.map(e => html`<tr>
-      <td class="l head">${e.name}${e.role ? html` <small class="muted">${e.role}</small>` : ''}
+      <td class="l head">${e.name}
         ${soon.get(e.id + 'birthday') ? html` <span class="tag ok" title="Birthday soon">🎂 BDAY</span>` : ''}
         ${soon.get(e.id + 'anniversary') ? html` <span class="tag ok" title="Work anniversary soon">🎉 ${soon.get(e.id + 'anniversary').years}Y</span>` : ''}</td>
       <td data-label="Code">${ui.showPins ? e.pin : '••••'}</td>
@@ -682,7 +678,6 @@ const Views = {
           <div><label for="sComp">Business name</label><input id="sComp" name="company" value="${st.company}"></div>
           <div><label for="sCur">Currency symbol</label><input id="sCur" name="currency" value="${st.currency}" maxlength="4"></div>
           <div><label for="sTier">Rate 1 covers first … hours/week</label><input id="sTier" name="tierHours" type="number" step="0.5" min="0" value="${st.tierHours}"></div>
-          <div><label for="sTheme">Theme</label><select id="sTheme" name="theme">${opt('auto', st.theme, 'Follow device')}${opt('light', st.theme, 'Light')}${opt('dark', st.theme, 'Dark')}</select></div>
         </div></div>
         <div class="section"><h3>Break rules</h3>
           <div id="rules">${st.breakRules.map(ruleRow)}</div>
@@ -745,7 +740,7 @@ const Dialogs = {
   },
   rosterImport(preview){
     if(!preview){
-      ui.rosterImportData = null;
+      ui.rosterImportData = null; ui.rosterOffset = null;
       return Modal.open(html`<h2 id="modalTitle">Import old roster</h2>
         <div class="row"><button class="inv" data-act="rosterImportFetch">Preview from old roster app</button>
           <label class="btn" style="margin:0">Choose JSON file<input type="file" accept=".json,application/json" class="sr" data-change="rosterImportFile"></label>
@@ -762,6 +757,9 @@ const Dialogs = {
         <tr><td class="l" data-label="Worked shifts re-priced">${p.repricedShifts}</td></tr>
         <tr><td class="l" data-label="Skipped">${p.skipped.length + p.ambiguous.length}</td></tr>
       </tbody></table></div>
+      <div class="row"><label for="rOffset" style="margin:0">Move dates by (days)</label>
+        <input id="rOffset" type="number" min="-7" max="7" step="1" value="${p.offsetDays}" style="width:5em">
+        <button data-act="rosterImportRecheck">Update preview</button></div>
       ${p.sample.length ? html`<p class="muted">${p.sample.map((l, i) => html`${i ? html`<br>` : ''}${l}`)}</p>` : ''}
       <div class="row"><button class="inv" data-act="rosterImportApply" ${p.changedCells || p.toCreate.length ? '' : 'disabled'}>Import</button><button data-act="modalCancel">Cancel</button></div>`);
   },
@@ -869,8 +867,11 @@ const Actions = {
   rosterClearCell: () => saveRosterCell([]),
   rosterPdf: () => downloadFile(`/api/admin/export/roster.pdf?${weekParam()}`),
   rosterCopy: async () => {
-    if(!await Modal.confirm(`Copy this week onto the week of ${fmtDay(addDays(ui.weekStart, 7))}? Filled days there are replaced; empty days here leave them alone.`, { title: 'Copy roster', ok: 'Copy' })) return;
-    const r = await RemoteStore.call('post', '/api/admin/roster/copy-week', { week: ymd(ui.weekStart) });
+    const week = ymd(ui.weekStart);
+    const dry = await api.post('/api/admin/roster/copy-week', { week, dryRun: true }).catch(() => ({ repriced: 0 }));
+    const extra = dry.repriced ? ` This changes paid times for ${dry.repriced} shift(s) already worked.` : '';
+    if(!await Modal.confirm(`Copy this week onto the week of ${fmtDay(addDays(ui.weekStart, 7))}? Filled days there are replaced; empty days here leave them alone.${extra}`, { title: 'Copy roster', ok: 'Copy' })) return;
+    const r = await RemoteStore.call('post', '/api/admin/roster/copy-week', { week });
     if(r) undoToast(`${r.copied} days copied`);
   },
   rosterClear: async () => {
@@ -884,11 +885,17 @@ const Actions = {
   rosterImport: () => Dialogs.rosterImport(),
   rosterImportFetch: async () => {
     Toast.show('Fetching the old roster…', {ms:2000});
-    try{ Dialogs.rosterImport(await api.post('/api/admin/roster/import', { dryRun: true })); }
+    try{ Dialogs.rosterImport(await api.post('/api/admin/roster/import', { ...importBody(), dryRun: true })); }
     catch(e){ Toast.show(e.message, {ms:5000}); }
   },
+  rosterImportRecheck: () => {
+    const o = Math.trunc(Number($('#rOffset').value));
+    if(!Number.isFinite(o) || o < -7 || o > 7) return Toast.show('Enter a number from -7 to 7', {ms:2500});
+    ui.rosterOffset = o;
+    return Actions.rosterImportFetch();
+  },
   rosterImportApply: async () => {
-    const r = await RemoteStore.call('post', '/api/admin/roster/import', ui.rosterImportData ? { data: ui.rosterImportData } : {});
+    const r = await RemoteStore.call('post', '/api/admin/roster/import', importBody());
     if(!r) return;
     Modal.open(html`<h2 id="modalTitle">Roster imported</h2><p>${r.changedCells} days written.</p>
       ${r.created.length ? html`<p><b>New staff kiosk codes (shown once, write them down):</b></p>
@@ -911,6 +918,7 @@ const Actions = {
   },
   week: d => { ui.weekStart = addDays(ui.weekStart, 7 * +d.k); Admin.render(); },
   weekToday: () => { ui.weekStart = startOfWeek(new Date()); Admin.render(); },
+  toggleDays: () => { ui.showDays = !ui.showDays; Admin.render(); },
   sort: d => { ui.sort = { k: d.k, dir: ui.sort.k === d.k ? -ui.sort.dir : (d.k === 'name' ? 1 : -1) }; Admin.render(); },
   showShifts: (d, el, ev) => { ev.preventDefault(); ui.shiftFilter = d.id; ui.tab = 'shifts'; Admin.render(); },
   togglePins: () => { ui.showPins = !ui.showPins; $('#empRows').innerHTML = Views.empRows(); },
@@ -920,10 +928,6 @@ const Actions = {
       await RemoteStore.refresh(); render();
       Toast.show(r.undone ? `Undone: ${r.undone}` : 'Nothing to undo', {ms:2500});
     }catch(e){ if(e.status !== 401) Toast.show(e.message, {ms:4000}); }
-  },
-  themeCycle: () => {
-    const order = ['auto', 'light', 'dark'], next = order[(order.indexOf(db().settings.theme) + 1) % 3];
-    RemoteStore.call('put', '/api/admin/settings', { theme: next });
   },
   adjust: d => Dialogs.adjust(d.id),
   delAdj: async d => {
@@ -973,11 +977,12 @@ const Actions = {
     download(`payroll_${ymd(ui.weekStart)}.csv`, csvBuild(out), 'text/csv');
   },
   exportShifts: () => {
-    const a = +ui.weekStart, b = +addDays(ui.weekStart, 7), st = db().settings;
-    const out = [['Employee', 'Date', 'In', 'Out', 'Worked hrs', 'Break taken min', 'Break by rule min', 'Deducted min', 'Paid hrs']];
+    const a = +ui.weekStart, b = +addDays(ui.weekStart, 7), calc = Pay.calcAll(db(), Date.now(), { from: a, to: b });
+    const out = [['Employee', 'Date', 'In', 'Out', 'Paid in', 'Paid out', 'Late min', 'Worked hrs', 'Break taken min', 'Break by rule min', 'Deducted min', 'Paid hrs']];
     for(const sh of db().shifts.filter(x => x.in >= a && x.in < b).sort((x, y) => x.in - y.in)){
-      const c = Pay.shift(sh, st);
-      out.push([empName(sh.empId), ymd(sh.in), fmtTime(sh.in), sh.out ? fmtTime(sh.out) : 'OPEN', c.total.toFixed(2), c.actual, c.policy, c.ded, c.paid.toFixed(2)]);
+      const c = calc.get(sh.id);
+      out.push([empName(sh.empId), ymd(sh.in), fmtTime(sh.in), sh.out ? fmtTime(sh.out) : 'OPEN', fmtTime(c.paidIn), sh.out ? fmtTime(c.paidOut) : 'OPEN', c.lateMin,
+        c.total.toFixed(2), c.actual, c.policy, c.ded, c.paid.toFixed(2)]);
     }
     download(`shifts_${ymd(ui.weekStart)}.csv`, csvBuild(out), 'text/csv');
   },
@@ -986,6 +991,9 @@ const Actions = {
     if(await RemoteStore.call('post', '/api/admin/erase', { confirm: 'ERASE' })) Toast.show('All data erased. Admin PIN reset to 0000.', {ms:5000});
   }
 };
+
+// Body for the roster import call: uploaded data (if any) and the admin's date offset (if changed).
+const importBody = () => ({ ...(ui.rosterImportData ? { data: ui.rosterImportData } : {}), ...(ui.rosterOffset != null ? { offsetDays: ui.rosterOffset } : {}) });
 
 const Changes = {
   payType: el => { el.closest('form').dataset.pay = el.value; },
@@ -1101,7 +1109,7 @@ const Forms = {
   settingsSave: async fd => {
     const rm = fd.getAll('rm');
     const breakRules = fd.getAll('rh').map((h, i) => ({ h: num(h), m: num(rm[i]) }));
-    const body = { company: fd.get('company'), currency: fd.get('currency'), tierHours: fd.get('tierHours'), theme: fd.get('theme'),
+    const body = { company: fd.get('company'), currency: fd.get('currency'), tierHours: fd.get('tierHours'),
       breakMode: fd.get('breakMode'), breakRules, kioskIdleSec: fd.get('kioskIdleSec'), adminTimeoutMin: fd.get('adminTimeoutMin'), maxShiftHours: fd.get('maxShiftHours'),
       rounding: fd.get('rounding') === '1', roundFrom: fd.get('roundFrom') || null, roundGraceMin: fd.get('roundGraceMin'), roundStepMin: Number(fd.get('roundStepMin')) };
     if(await RemoteStore.call('put', '/api/admin/settings', body)) Toast.show('Settings saved', { ms: 1500, action: { label: 'Undo', act: 'undo' } });

@@ -98,6 +98,7 @@ export function payslipSummary(r, report){
     ['Paid hours', `${fmtHM(r.paid)} (${r.paid.toFixed(2)}h)${r.late ? ` · late ${r.late}×` : ''}`],
     ...(r.payType === 'salary'
       ? [['Weekly salary', M(r.salary ?? 0)]]
+      : r.payType === 'fixed' ? [['All hours', `${r.paid.toFixed(2)}h × ${M(r.r1)} = ${M(r.p1 + r.p2)}`]]
       : [[`First ${tier}h`, `${r.h1.toFixed(2)}h × ${M(r.r1)} = ${M(r.p1)}`], [`After ${tier}h`, `${r.h2.toFixed(2)}h × ${M(r.r2)} = ${M(r.p2)}`]]),
     ['Gross pay', M(r.gross)],
     ...(r.fixed || []).map(f => [`${f.type === 'allowance' ? '+' : '−'} ${f.label} (fixed)`, signed(f.type, f.amount)]),

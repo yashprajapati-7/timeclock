@@ -31,12 +31,12 @@ export const atLocal = (day, hhmm) => {
   return new Date(y, m - 1, d, h, mi).getTime();
 };
 export const addDaysYmd = (day, n) => { const [y, m, d] = day.split('-').map(Number); return ymd(new Date(y, m - 1, d + n)); };
-export const floorMin = ts => { const d = new Date(ts); d.setSeconds(0, 0); return d.getTime(); };
-const atMinuteOfDay = (ts, minutes) => { const d = new Date(ts); return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, minutes).getTime(); };
+export const floorMin = ts => ts - (((ts % 60000) + 60000) % 60000);   // UTC maths: safe in the repeated DST hour
 const minuteOfDay = ts => { const d = new Date(ts); return d.getHours() * 60 + d.getMinutes(); };
 // Round up/down to the step on the local clock (:00/:15/:30/:45 for 15). Seconds are ignored.
-export const ceilStep = (ts, step) => atMinuteOfDay(ts, Math.ceil(minuteOfDay(ts) / step) * step);
-export const floorStep = (ts, step) => atMinuteOfDay(ts, Math.floor(minuteOfDay(ts) / step) * step);
+const stepBy = (ts, step, round) => { const m = minuteOfDay(ts); return floorMin(ts) + (round(m / step) * step - m) * 60000; };
+export const ceilStep = (ts, step) => stepBy(ts, step, Math.ceil);
+export const floorStep = (ts, step) => stepBy(ts, step, Math.floor);
 
 // Roster shorthand from the old roster app: "9.30" / "9.5" (= 9:50) with AM/PM, plus "17:00" or "7:05" PM.
 export function parseShortTime(str, meridiem){

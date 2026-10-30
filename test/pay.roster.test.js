@@ -148,3 +148,19 @@ test('anomalies: unpaid overtime and salaried without a salary', () => {
   assert.ok(a.some(x => x.level === 'med' && x.shiftId === 'ot' && /40 min/.test(x.msg)));
   assert.ok(a.some(x => x.empId === 'e2' && /salar/i.test(x.msg)));
 });
+
+test('match: a clock-in inside one entry is never stolen by a later entry that day', () => {
+  const split = roster(DAY, cafe('09:00', '13:00'), cafe('15:00', '19:00'));
+  const ms = matchRoster([sh('a', t(9), t(12)), sh('b', t(12, 30), t(13)), sh('c', t(15), t(19))], split, 'e1', ST);
+  assert.equal(ms.get('b').entry.start, '09:00');
+  const s = sh('b', t(12, 30), t(13));
+  assert.equal(shift(s, ST, t(20), ms.get("b")).span, 0.5);
+  // Nothing qualifies → the earliest later entry that day.
+  assert.equal(match1(sh('d', t(5), t(12)), split).entry.start, '09:00');
+});
+
+test('approved overtime never pays less than the rostered finish', () => {
+  const r = roster(DAY, cafe('09:00', '17:50'));
+  assert.equal(paid(t(9), t(17, 57), { otApproved: true }, r).paidOut, t(17, 50));
+  assert.equal(paid(t(9), t(18, 20), { otApproved: true }, r).paidOut, t(18, 15));
+});

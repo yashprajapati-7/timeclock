@@ -103,7 +103,8 @@ export function rosterRoutes({ db, clock, undo, fetch: fetchImpl = globalThis.fe
   // Import from the old roster app (fetched from the configured URL only — never a URL from the request) or uploaded JSON.
   r.post('/import', async (req, res) => {
     const src = req.body?.data ?? await fetchOldRoster(fetchImpl, rosterImportUrl);
-    const offsetDays = Number.isInteger(req.body?.offsetDays) ? req.body.offsetDays : undefined;
+    const o = req.body?.offsetDays;
+    const offsetDays = Number.isInteger(o) && o >= -7 && o <= 7 ? o : undefined;
     const now = clock();
     let plan;
     try{ plan = planImport(src, { ...R.loadData(db), now }, { offsetDays }); }

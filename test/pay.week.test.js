@@ -123,3 +123,12 @@ test('fixed items apply within their weeks and only when there is pay', () => {
   const sal = { settings, adj: {}, shifts: [], employees: [emp('s1', { payType: 'salary', weeklySalary: 500, fixedItems: items })] };
   assert.equal(week(sal, ws)[0].net, 510);                   // salaried: fixed items apply even with no hours
 });
+
+test('fixed rate pays one rate for every hour, before and after the tier', () => {
+  const f = tierFixture();
+  f.employees = [emp('e1', { payType: 'fixed', rate1: 25, rate2: 99 })];
+  const [r] = week(f, ws);
+  assert.ok(r.paid > 24);
+  assert.equal(r.r2, 25);
+  assert.ok(Math.abs(r.gross - r.paid * 25) < 1e-9);
+});

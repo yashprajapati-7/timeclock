@@ -49,7 +49,7 @@ export function validateEmployee(b = {}){
   const name = String(b.name ?? '').trim();
   if(!name) fail('Enter a name');
   const payType = b.payType ?? 'hourly';
-  if(!['hourly', 'salary'].includes(payType)) fail('Pay type must be hourly or salary');
+  if(!['hourly', 'fixed', 'salary'].includes(payType)) fail('Pay type must be hourly, fixed or salary');
   const weeklySalary = payType === 'salary' ? rateOf(b.weeklySalary, 'Weekly salary') : null;
   if(payType === 'salary' && weeklySalary == null) fail('Weekly salary is required for salaried staff');
   const email = String(b.email ?? '').trim().toLowerCase();

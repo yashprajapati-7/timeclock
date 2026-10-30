@@ -93,3 +93,8 @@ test('rounding settings', () => {
   bad(() => validateSettings({ roundFrom: '2026-11-03' }), /Monday/);
   bad(() => validateSettings({ rosterImport: {} }), /Unknown/);
 });
+
+test('employee pay type accepts fixed rate', async () => {
+  const { validateEmployee } = await import('../src/validate.js');
+  assert.equal(validateEmployee({ name: 'A', payType: 'fixed', rate1: 25 }).payType, 'fixed');
+});

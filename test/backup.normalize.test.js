@@ -37,3 +37,13 @@ test('rejects roster entries for unknown employees or with bad times', () => {
   const badEmp = fixture('backup-v2'); badEmp.v = 3; badEmp.employees[0].email = 'nope@';
   assert.throws(() => normalizeBackup(badEmp), /Email/);
 });
+
+test('rejects roster keys with a bad day and junk rosterImport settings', () => {
+  for(const key of ['garbage-key|e1', '2026-13-45|e1', '2026-02-30|e1'])
+    assert.throws(() => normalizeBackup({ ...fixture('backup-v2'), v: 3, roster: { [key]: [{ type: 'OFF' }] } }), /roster/, key);
+  const b = fixture('backup-v2');
+  const n = normalizeBackup({ ...b, v: 3, settings: { ...b.settings, rosterImport: [1, 2] } });
+  assert.equal(n.settings.rosterImport, undefined);
+  const ok = normalizeBackup({ ...b, v: 3, settings: { ...b.settings, rosterImport: { offsetDays: 1, idMap: { 1: 'e1' } } } });
+  assert.deepEqual(ok.settings.rosterImport, { offsetDays: 1, idMap: { 1: 'e1' } });
+});

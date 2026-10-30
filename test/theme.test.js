@@ -19,9 +19,10 @@ const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - 
 const TABS = ['dashboard', 'roster', 'report', 'shifts', 'employees', 'audit', 'settings'];
 const TYPES = ['cafe', 'bakery', 'training', 'delivery', 'bake', 'bkyc', 'off'];
 
-for(const mode of ['light', 'dark']){
+for(const mode of ['light']){
   test(`every colour pair is readable (WCAG ≥ 4.5) in ${mode} mode`, () => {
     const t = block(mode);
+    for(const k of TABS) assert.ok(contrast(t[`c-${k}`], t[`c-${k}-soft`]) >= 4.5, `tab tint ${k}`);
     for(const k of TABS) assert.ok(contrast(t[`c-${k}`], t['on-accent']) >= 4.5, `tab ${k}: ${contrast(t[`c-${k}`], t['on-accent']).toFixed(2)}`);
     for(const k of TYPES) assert.ok(contrast(t[`t-${k}-bg`], t[`t-${k}-fg`]) >= 4.5, `type ${k}`);
     for(const k of ['on', 'break', 'late', 'ok']) assert.ok(contrast(t[`s-${k}`], t.paper) >= 4.5, `status ${k}`);
@@ -33,4 +34,10 @@ test('each admin tab sets its accent; kiosk rules never use colour tokens', () =
   const kioskRules = [...css.matchAll(/(^|\})\s*([^{}]*\.(kiosk|keys|pins|status|card|clockcard)[^{}]*)\{([^}]*)\}/gm)];
   assert.ok(kioskRules.length > 3);
   for(const r of kioskRules) assert.doesNotMatch(r[4], /var\(--(c|t|s)-/, r[2]);
+});
+
+test('one light theme: no dark mode rules, no theme switch', () => {
+  assert.doesNotMatch(css, /prefers-color-scheme|data-theme="dark"/);
+  const js = fs.readFileSync(path.join(ROOT, 'public/app.js'), 'utf8');
+  assert.doesNotMatch(js, /themeCycle|name="theme"/);
 });

@@ -13,7 +13,7 @@ test('admin shell: Roster tab, colour classes, kiosk stays plain', () => {
   has("['roster','Roster']");
   has("app.className = 'admin'");
   has("app.className = ''");
-  has('style="--tab:var(--c-${k})"', 'per-tab colour');
+  has('style="--tab:var(--c-${k});--tab-soft:var(--c-${k}-soft)"', 'per-tab colour');
 });
 
 test('roster page: grid, cell editor, copy/clear/pdf/import', () => {
@@ -25,7 +25,8 @@ test('roster page: grid, cell editor, copy/clear/pdf/import', () => {
 });
 
 test('employees: pay type, salary, contact, dates, fixed items', () => {
-  for(const n of ['payType', 'weeklySalary', 'email', 'phone', 'birthday', 'startDate', 'role']) has(`name="${n}"`);
+  for(const n of ['payType', 'weeklySalary', 'email', 'phone', 'birthday', 'startDate']) has(`name="${n}"`);
+  has('value="fixed"', 'fixed rate pay type');
   has('data-act="addFixedItem"');
   has('data-label="Pay"');
   has('data-label="Email"');

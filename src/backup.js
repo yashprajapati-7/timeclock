@@ -1,3 +1,4 @@
+import { addDaysYmd } from './shared/format.js';
 // Backup format = the legacy app's "Download backup" JSON (v1, v2) and our own v3 (adds roster, richer employees, overtime approval).
 import { ValidationError } from './errors.js';
 import { DEFAULT_SETTINGS, PUBLIC_SETTINGS, getSettings, setSettings, listEmployees, listShifts, listAdjustments,
@@ -45,9 +46,15 @@ export function normalizeBackup(json){
     });
   }
   for(const [key, list] of Object.entries(d.roster)){
-    if(!/^d{4}-d{2}-d{2}|.+$/.test(key) || !empIds.has(key.slice(11))){ problems.push(`roster ${key}: unknown employee or bad day`); continue; }
+    const day = key.slice(0, 10);
+    if(!/^d{4}-d{2}-d{2}|.+$/.test(key) || addDaysYmd(day, 0) !== day || !empIds.has(key.slice(11))){ problems.push(`roster ${key}: unknown employee or bad day`); continue; }
     try{ d.roster[key] = validateRosterEntries(list); }catch(err){ problems.push(`roster ${key}: ${err.message}`); }
   }
+  // Remembered import mapping: keep only a well-formed one.
+  const ri = d.settings.rosterImport;
+  const riOk = ri && typeof ri === 'object' && !Array.isArray(ri) && Number.isInteger(ri.offsetDays)
+    && ri.idMap && typeof ri.idMap === 'object' && !Array.isArray(ri.idMap) && Object.values(ri.idMap).every(v => typeof v === 'string');
+  if(!riOk) delete d.settings.rosterImport;
   // Audit rows are history only: keep the well-formed ones rather than rejecting the whole backup.
   d.audit = d.audit.filter(a => a && isNum(a.ts) && typeof a.action === 'string')
     .map(a => ({ ts: a.ts, actor: String(a.actor ?? ''), action: a.action, detail: String(a.detail ?? '') }));
@@ -86,7 +93,7 @@ export async function importBackup(db, json, { now = Date.now() } = {}){
     }
     for(const [key, entries] of Object.entries(d.roster)) replaceRosterCell(db, key.slice(11), key.slice(0, 10), entries);
     for(const a of [...d.audit].reverse()) addAudit(db, a);
-    const rosterImport = d.settings.rosterImport && typeof d.settings.rosterImport === 'object' ? { rosterImport: d.settings.rosterImport } : {};
+    const rosterImport = d.settings.rosterImport ? { rosterImport: d.settings.rosterImport } : {};
     setSettings(db, { ...cleanSettings(d.settings), ...rosterImport, defaultPin: !!defaultPin, adminPinHash: pinHash });
     addAudit(db, { ts: now, actor: 'System', action: 'Backup restored', detail: `${d.employees.length} employees, ${d.shifts.length} shifts` });
   });

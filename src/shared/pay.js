@@ -32,17 +32,19 @@ export function matchRoster(empShifts, roster = {}, empId, st){
   for(const sh of [...empShifts].sort((a, b) => a.in - b.in)){
     if(sh.in < from) continue;
     const day = ymd(sh.in);
-    let best = null;
+    // Nearest entry whose match range holds the clock-in; only if none does, the earliest later entry that day.
+    let best = null, early = null;
     for(const dd of [addDaysYmd(day, -1), day, addDaysYmd(day, 1)]){
       for(const entry of roster[`${dd}|${empId}`] || []){
         if(!TIMED.includes(entry.type) || !entry.start || !entry.end) continue;
         const { S, E } = rosterSpan(entry, dd);
-        const inWindow = S - MATCH_EARLY_MIN * MIN <= sh.in && sh.in < E;
-        if(!inWindow && !(dd === day && sh.in < S)) continue;
-        const dist = Math.abs(S - sh.in);
-        if(!best || dist < best.dist || (dist === best.dist && S < best.S)) best = { entry, day: dd, S, E, dist };
+        if(S - MATCH_EARLY_MIN * MIN <= sh.in && sh.in < E){
+          const dist = Math.abs(S - sh.in);
+          if(!best || dist < best.dist || (dist === best.dist && S < best.S)) best = { entry, day: dd, S, E, dist };
+        } else if(dd === day && sh.in < S && (!early || S < early.S)) early = { entry, day: dd, S, E, dist: 0 };
       }
     }
+    best ??= early;
     if(best){
       const { dist, ...m } = best;
       out.set(sh.id, { ...m, first: true, last: true });
@@ -74,7 +76,7 @@ export function paidSpan(sh, match, st, now = Date.now()){
   if(match.last){
     if(outM >= E - g && outM <= E + g) res.paidOut = E;
     else if(outM > E + g){
-      if(sh.otApproved) res.paidOut = floorStep(outM, step);
+      if(sh.otApproved) res.paidOut = Math.max(E, floorStep(outM, step));
       else { res.paidOut = E; res.capped = Math.round((outM - E) / MIN); }
     } else if(sh.out != null){
       res.paidOut = floorStep(outM, step);
@@ -131,7 +133,7 @@ export function week(data, ws, now = Date.now()){
       if(c.lateMin > num(data.settings.roundGraceMin)){ late++; lateMin += c.lateMin; }
     }
     const h1 = Math.min(paid, tier), h2 = Math.max(0, paid - tier);
-    const r1 = num(e.rate1), r2 = num(e.rate2);
+    const r1 = num(e.rate1), r2 = e.payType === 'fixed' ? r1 : num(e.rate2);   // fixed rate: one rate for all hours
     // Salaried staff get their fixed weekly amount (from their start date on); hours are tracked but not priced.
     const salaried = e.payType === 'salary';
     const salary = salaried ? (!e.startDate || e.startDate <= ymd(addDays(ws, 6)) ? num(e.weeklySalary) : 0) : null;
