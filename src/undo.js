@@ -63,13 +63,26 @@ export function createUndo(db, clock = Date.now){
       const stack = stacks.get(key);
       const top = stack?.at(-1);
       if(!top) return null;
-      db.tx(() => {
-        if(top.entries.some(e => !same(snap[e.table](db, e.id), e.after)))
-          throw new HttpError(409, 'Data changed since this action; cannot undo');
-        // Shifts before employees on delete, employees before shifts on restore: reverse order handles both.
-        for(const e of [...top.entries].reverse()) restore[e.table](db, e.id, e.before);
-        addAudit(db, { ts: clock(), actor: 'Admin', action: 'Undo', detail: top.action });
-      });
+      const conflict = () => new HttpError(409, 'Data changed since this action; cannot undo');
+      try{
+        db.tx(() => {
+          if(top.entries.some(e => !same(snap[e.table](db, e.id), e.after))) throw conflict();
+          // Removing an employee would hit rows this action never touched (shifts: RESTRICT, adjustments: CASCADE).
+          const touchedAdj = new Set(top.entries.filter(e => e.table === 'adjustments').map(e => Number(e.id)));
+          for(const e of top.entries.filter(x => x.table === 'employees' && !x.before)){
+            if(db.get('SELECT 1 x FROM shifts WHERE emp_id = ? LIMIT 1', e.id)) throw conflict();
+            if(db.all('SELECT id FROM adjustments WHERE emp_id = ?', e.id).some(a => !touchedAdj.has(a.id))) throw conflict();
+          }
+          // Shifts before employees on delete, employees before shifts on restore: reverse order handles both.
+          for(const e of [...top.entries].reverse()) restore[e.table](db, e.id, e.before);
+          addAudit(db, { ts: clock(), actor: 'Admin', action: 'Undo', detail: top.action });
+        });
+      }catch(err){
+        // e.g. a restored employee code now belongs to someone else (UNIQUE) — still a conflict, not a crash.
+        // Only constraint failures (primary result code 19) mean "changed meanwhile"; BUSY/IO errors stay real errors.
+        if(err.code === 'ERR_SQLITE_ERROR' && (err.errcode & 0xff) === 19) throw conflict();
+        throw err;
+      }
       stack.pop();
       return top.action;
     },

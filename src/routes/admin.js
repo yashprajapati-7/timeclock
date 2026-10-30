@@ -5,7 +5,7 @@ import * as R from '../repo.js';
 import { validatePin, validateEmployee, validateShift, validateSettings, validateAdjustment } from '../validate.js';
 import { normalizeBackup, importBackup, exportBackup } from '../backup.js';
 import { ensureAdminPin } from './auth.js';
-import { fmtDay, hm, money, ymd } from '../shared/format.js';
+import { clamp, fmtDay, hm, money, ymd } from '../shared/format.js';
 
 export function adminRoutes({ db, clock, undo }){
   const r = Router();
@@ -25,7 +25,7 @@ export function adminRoutes({ db, clock, undo }){
   });
 
   r.get('/audit', (req, res) => {
-    res.json(R.listAudit(db, { q: String(req.query.q ?? ''), limit: Math.min(Number(req.query.limit) || 300, 5000) }));
+    res.json(R.listAudit(db, { q: String(req.query.q ?? ''), limit: clamp(Math.trunc(Number(req.query.limit)) || 300, 1, 5000) }));
   });
 
   // ----- Employees -----
@@ -69,6 +69,7 @@ export function adminRoutes({ db, clock, undo }){
   r.put('/settings', (req, res) => {
     const patch = validateSettings(req.body);
     const keys = Object.keys(patch);
+    if(!keys.length) return res.json({ ok: true });
     if(keys.length === 1 && keys[0] === 'theme'){      // theme toggles are not undoable (as before)
       R.setSettings(db, patch);
       audit('Theme', patch.theme);

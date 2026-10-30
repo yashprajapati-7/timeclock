@@ -6,9 +6,8 @@ import path from 'node:path';
 import request from 'supertest';
 import ExcelJS from 'exceljs';
 import { openDb, migrate } from '../src/db.js';
-import { makeTestApp, loginAgent, fixture, fakeClock, d } from './helpers.js';
+import { makeTestApp, loginAgent, fixture, fakeClock, d, binary } from './helpers.js';
 
-const binary = (res, cb) => { const c = []; res.on('data', x => c.push(x)); res.on('end', () => cb(null, Buffer.concat(c))); };
 const shiftRows = async a => {
   const x = await a.get('/api/admin/export/payroll.xlsx?week=2026-10-26').buffer(true).parse(binary);
   const wb = new ExcelJS.Workbook();

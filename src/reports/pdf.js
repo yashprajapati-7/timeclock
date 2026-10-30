@@ -10,7 +10,8 @@ const FONT = require.resolve('dejavu-fonts-ttf/ttf/DejaVuSansMono.ttf');
 const FONT_BOLD = require.resolve('dejavu-fonts-ttf/ttf/DejaVuSansMono-Bold.ttf');
 
 export function fontHasGlyph(codePoint){
-  const fontkit = require('fontkit');
+  // fontkit is pdfkit's own dependency: resolve it from pdfkit's location rather than assuming it is hoisted.
+  const fontkit = createRequire(require.resolve('pdfkit'))('fontkit');
   return fontkit.openSync(FONT).hasGlyphForCodePoint(codePoint);
 }
 
@@ -96,7 +97,7 @@ export function payrollPdf(report, opts = {}){
     { label: 'Net pay', width: 54, align: R },
   ];
   const line = (name, r) => [name, ...r.days.map(h => h ? fmtHM(h) : '–'), fmtHM(r.total), fmtMin(r.ded), fmtHM(r.paid),
-    r.h1.toFixed(2), r.r1 == null ? '' : M(r.r1), r.h2.toFixed(2), r.r2 == null ? '' : M(r.r2), M(r.gross), M(r.allow), M(r.deduct), M(r.net)];
+    r.h1.toFixed(2), M(r.r1), r.h2.toFixed(2), M(r.r2), M(r.gross), M(r.allow), M(r.deduct), M(r.net)];
   const rows = report.rows.map(r => line(r.name, r));
   rows.push(line('TOTAL', { ...report.totals, r1: null, r2: null }));
   table(doc, columns, rows, { bold: new Set([rows.length - 1]) });

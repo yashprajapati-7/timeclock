@@ -3,9 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import ExcelJS from 'exceljs';
-import { makeTestApp, loginAgent, fixture } from './helpers.js';
+import { makeTestApp, loginAgent, fixture, binary } from './helpers.js';
 
-const binary = (res, cb) => { const c = []; res.on('data', x => c.push(x)); res.on('end', () => cb(null, Buffer.concat(c))); };
 
 test('kiosk sequence identify → in → bs → be → out', async () => {
   const { app, clock } = await makeTestApp();

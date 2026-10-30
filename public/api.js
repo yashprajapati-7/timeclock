@@ -30,6 +30,17 @@ export const api = {
   post: (path, body) => call('POST', path, body),
   put: (path, body) => call('PUT', path, body),
   del: path => call('DELETE', path),
-  // File downloads: let the browser handle the attachment with the session cookie.
-  download(path){ globalThis.location.href = path; },
+  // File downloads via fetch, so an expired session or bad week shows a toast instead of a raw JSON page.
+  async file(path){
+    const res = await fetch(path, { credentials: 'same-origin' });
+    if(res.status >= 400){
+      let data = {};
+      try{ data = await res.json(); }catch{ /* not JSON */ }
+      if(res.status === 401) api.onUnauthorized?.();
+      throw new ApiError(res.status, data.error || `Download failed (${res.status})`, data);
+    }
+    const cd = res.headers.get('content-disposition') || '';
+    const name = /filename="?([^";]+)"?/.exec(cd)?.[1] || path.split('/').pop().split('?')[0];
+    return { blob: await res.blob(), name };
+  },
 };

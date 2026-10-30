@@ -2,10 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import ExcelJS from 'exceljs';
-import { makeTestApp, loginAgent, fixture } from './helpers.js';
+import { makeTestApp, loginAgent, fixture, binary } from './helpers.js';
 import { addAudit, listAudit } from '../src/repo.js';
 
-const binary = (res, cb) => { const c = []; res.on('data', x => c.push(x)); res.on('end', () => cb(null, Buffer.concat(c))); };
 const PATHS = ['/api/admin/export/payroll.xlsx', '/api/admin/export/payroll.pdf', '/api/admin/export/payslips.pdf', '/api/admin/export/audit.csv'];
 
 test('exports need a session', async () => {

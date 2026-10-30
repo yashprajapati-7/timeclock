@@ -24,3 +24,5 @@ export async function loginAgent(app, pin = '0000'){
   if(res.status !== 200) throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
   return agent;
 }
+// supertest parser that returns the raw response body as a Buffer (for xlsx / pdf downloads).
+export const binary = (res, cb) => { const c = []; res.on('data', x => c.push(x)); res.on('end', () => cb(null, Buffer.concat(c))); };

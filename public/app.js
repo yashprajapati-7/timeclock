@@ -7,7 +7,7 @@
   - Actions / Forms / Changes / Inputs: one delegated listener per event type (data-act, data-submit, …).
 */
 import { H, MIN, DAYS, pad, num, clamp, trunc, initials, ymd, toLocalInput, fromLocalInput, fmtTime, fmtDay, fmtStamp,
-  fmtHM, fmtMin, fmtElapsed, money as fmtMoney, dayIndex, startOfWeek, addDays, niceStep, csvBuild } from '/shared/format.js';
+  fmtHM, fmtMin, fmtElapsed, money as fmtMoney, startOfWeek, addDays, niceStep, csvBuild } from '/shared/format.js';
 import * as Pay from '/shared/pay.js';
 import { api } from '/api.js';
 
@@ -25,10 +25,19 @@ const html = (strings, ...vals) => new Safe(strings.reduce((out, s, i) => out + 
 const currency = () => RemoteStore.state?.settings.currency ?? Kiosk.info?.currency ?? '$';
 const money = n => fmtMoney(n, currency());
 
-function download(name, text, type){
+function saveBlob(name, blob){
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text], {type}));
+  a.href = URL.createObjectURL(blob);
   a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const download = (name, text, type) => saveBlob(name, new Blob([text], {type}));
+// Server-generated files (Excel, PDF, backups) — errors become toasts.
+async function downloadFile(path){
+  Toast.show('Preparing download…', {ms:1500});
+  try{
+    const { blob, name } = await api.file(path);
+    saveBlob(name, blob);
+  }catch(e){ if(e.status !== 401) Toast.show(e.message, {ms:4000}); }
 }
 
 // ---------- Remote store (admin only) ----------
@@ -37,16 +46,17 @@ const RemoteStore = {
   get undoLabel(){ return RemoteStore.state?.undoLabel ?? null; },
   async refresh(){ RemoteStore.state = await api.get('/api/admin/state'); },
   // Mutation → refresh → re-render. Returns the response, or null after showing the server's message.
+  // A failed refresh after a successful mutation is NOT a failed mutation (re-submitting would duplicate it).
   async call(method, path, body){
-    try{
-      const res = await api[method](path, body);
-      await RemoteStore.refresh();
-      render();
-      return res ?? {};
-    }catch(e){
+    let res;
+    try{ res = await api[method](path, body); }
+    catch(e){
       if(e.status !== 401) Toast.show(e.message, {ms:4000});
       return null;
     }
+    try{ await RemoteStore.refresh(); render(); }
+    catch(e){ if(e.status !== 401) Toast.show('Saved, but could not reload the data. Check the connection.', {ms:4000}); }
+    return res ?? {};
   }
 };
 const db = () => RemoteStore.state;
@@ -320,9 +330,13 @@ const Admin = {
       <div class="row"><button class="inv" type="submit">Enter</button><button type="button" data-act="modalCancel">Cancel</button></div></form>`);
     tickLive();
   },
-  async logout(reason){
-    if(ui.view === 'admin' && !reason) await api.post('/api/auth/logout').catch(() => {});
-    ui.view = 'kiosk'; RemoteStore.state = null;
+  // Always end the server session, unless the server already told us it is gone (401).
+  async logout(reason, { sessionGone = false } = {}){
+    const wasAdmin = ui.view === 'admin';
+    // Leave admin view before awaiting, so the 1 s idle tick cannot trigger a second logout meanwhile.
+    ui.view = 'kiosk';
+    if(wasAdmin && !sessionGone) await api.post('/api/auth/logout').catch(() => {});
+    RemoteStore.state = null;
     Modal.close(false);
     await Kiosk.loadInfo();
     render(); if(reason) Toast.show(reason);
@@ -688,12 +702,12 @@ const Actions = {
   delAdj: async d => {
     if(await RemoteStore.call('del', `/api/admin/adjustments/${d.id}`)) Dialogs.adjust(d.emp);
   },
-  payslip: d => api.download(`/api/admin/export/payslips.pdf?${weekParam()}&emp=${encodeURIComponent(d.id)}`),
-  payslipsAll: () => api.download(`/api/admin/export/payslips.pdf?${weekParam()}&emp=all`),
-  exportXlsx: () => api.download(`/api/admin/export/payroll.xlsx?${weekParam()}`),
-  exportPdf: () => api.download(`/api/admin/export/payroll.pdf?${weekParam()}`),
-  exportAudit: () => api.download('/api/admin/export/audit.csv'),
-  backup: () => api.download('/api/admin/backup'),
+  payslip: d => downloadFile(`/api/admin/export/payslips.pdf?${weekParam()}&emp=${encodeURIComponent(d.id)}`),
+  payslipsAll: () => downloadFile(`/api/admin/export/payslips.pdf?${weekParam()}&emp=all`),
+  exportXlsx: () => downloadFile(`/api/admin/export/payroll.xlsx?${weekParam()}`),
+  exportPdf: () => downloadFile(`/api/admin/export/payroll.pdf?${weekParam()}`),
+  exportAudit: () => downloadFile('/api/admin/export/audit.csv'),
+  backup: () => downloadFile('/api/admin/backup'),
   addShift: () => Dialogs.shift(),
   editShift: d => Dialogs.shift(d.id),
   delShift: async d => {
@@ -761,6 +775,7 @@ const Changes = {
       if(r) Toast.show(`Backup restored: ${r.employees} employees, ${r.shifts} shifts`, {ms:3000});
     };
     fr.readAsText(file);
+    el.value = "";   // allow picking the same file again
   }
 };
 
@@ -879,7 +894,7 @@ function bindEvents(){
   document.addEventListener('visibilitychange', onFocus);
   window.addEventListener('focus', onFocus);
   window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
-  api.onUnauthorized = () => { if(ui.view === 'admin') Admin.logout('Admin session locked after inactivity'); };
+  api.onUnauthorized = () => { if(ui.view === 'admin') Admin.logout('Admin session expired', { sessionGone: true }); };
 }
 
 async function boot(){

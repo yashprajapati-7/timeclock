@@ -32,8 +32,10 @@ export function authRoutes(ctx){
     const st = getSettings(db);
     purgeExpiredSessions(db, clock(), st.adminTimeoutMin);
     const pin = String(req.body?.pin ?? '');
+    // Count the attempt BEFORE the async hash check, so concurrent requests cannot all slip past check();
+    // a correct PIN refunds it below.
+    const f = lockouts.admin.fail(ip);
     if(!await verifyPin(pin, st.adminPinHash)){
-      const f = lockouts.admin.fail(ip);
       if(f.locked){
         audit('System', 'Admin locked out', '5 wrong admin PINs');
         return res.status(429).json({ error: 'Too many attempts', retryAfter: f.retryAfterSec });

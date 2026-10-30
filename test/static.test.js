@@ -54,6 +54,9 @@ test('app.js is fully on the API', () => {
   for(const p of ['/api/admin/export/payroll.xlsx', '/api/admin/export/payroll.pdf', '/api/admin/export/payslips.pdf',
     '/api/admin/export/audit.csv', '/api/admin/backup', '/api/admin/import', '/api/admin/undo'])
     assert.ok(src.includes(p), p);
+  // Idle auto-lock must end the server session too; only an already-expired session skips the logout call.
+  assert.match(src, /Admin\.logout\('Admin session locked after inactivity'\)/);
+  assert.match(src, /sessionGone: true/);
   const kiosk = src.slice(src.indexOf('// ---------- Kiosk'), src.indexOf('// ---------- Admin'));
   assert.ok(kiosk.length > 100);
   assert.doesNotMatch(kiosk, /\/api\/admin/);

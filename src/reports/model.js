@@ -5,7 +5,8 @@ import { ymd, addDays, startOfWeek } from '../shared/format.js';
 
 export function parseWeekParam(str, now = Date.now()){
   if(str == null || str === '') return +startOfWeek(now);
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(str)) || isNaN(new Date(str + 'T00:00'))) throw new HttpError(400, 'week must be YYYY-MM-DD');
+  // Round-trip check rejects impossible dates like 2026-02-31 (which Date would roll into March).
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(str)) || ymd(new Date(str + 'T00:00')) !== str) throw new HttpError(400, 'week must be a real date (YYYY-MM-DD)');
   return +startOfWeek(new Date(str + 'T00:00'));
 }
 
