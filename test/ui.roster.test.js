@@ -47,7 +47,7 @@ test('shifts, dashboard, settings, kiosk', () => {
   has('name="otApproved"');
   has('Coming up');
   has('Pay.upcoming(');
-  has('tz.offsetMin');
+  assert.ok(!js.includes('<h3>Alerts'), 'dashboard alerts panel removed');
   has('name="roundFrom"');
   has('name="roundGraceMin"');
   has('Rostered today');

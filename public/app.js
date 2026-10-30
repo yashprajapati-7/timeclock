@@ -349,7 +349,7 @@ const Admin = {
   },
   render(){
     if(!db()) return;
-    const s = db(), undoLabel = RemoteStore.undoLabel, alerts = Pay.anomalies(s, startOfWeek(new Date())).length;
+    const s = db(), undoLabel = RemoteStore.undoLabel;
     app.className = 'admin'; app.dataset.tab = ui.tab;   // per-tab colour accent
     app.innerHTML = html`
       <header class="bar noprint"><div class="brand">${s.settings.company}<span class="hide-sm"> · Admin</span></div>
@@ -357,7 +357,7 @@ const Admin = {
           ${undoLabel ? html`<button class="sm" data-act="undo" title="Undo: ${undoLabel}" aria-label="Undo ${undoLabel}">↶<span class="hide-sm"> Undo ${trunc(undoLabel, 18)}</span></button>` : ''}
           <button class="sm inv" data-act="logout">Lock<span class="hide-sm"> · Back to clock</span></button>
         </div></header>
-      <nav class="tabs noprint" role="tablist">${Admin.tabs.map(([k, l]) => html`<button role="tab" aria-selected="${ui.tab === k}" class="${ui.tab === k ? 'on' : ''}" style="--tab:var(--c-${k});--tab-soft:var(--c-${k}-soft)" data-act="tab" data-k="${k}">${l}${k === 'dashboard' && alerts ? html` <span class="badge" aria-label="${alerts} alerts">${alerts}</span>` : ''}</button>`)}</nav>
+      <nav class="tabs noprint" role="tablist">${Admin.tabs.map(([k, l]) => html`<button role="tab" aria-selected="${ui.tab === k}" class="${ui.tab === k ? 'on' : ''}" style="--tab:var(--c-${k});--tab-soft:var(--c-${k}-soft)" data-act="tab" data-k="${k}">${l}</button>`)}</nav>
       <main class="wrap">${Views[ui.tab]()}</main>`;
     tickLive();
   },
@@ -475,10 +475,7 @@ function paidTimes(sh, c){
 const Views = {
   dashboard(){
     const now = Date.now(), s = db(), ws = startOfWeek(now), tier = num(s.settings.tierHours);
-    const rows = Pay.week(s, ws, now), T = Pay.totals(rows), alerts = Pay.anomalies(s, ws, now);
-    // Days and weeks are server-local; warn if this device's clock is in a different timezone.
-    if(s.tz && s.tz.offsetMin !== -new Date(now).getTimezoneOffset())
-      alerts.unshift({ level: 'high', msg: `Server timezone (${s.tz.name}) differs from this device. Check TZ on the server.` });
+    const rows = Pay.week(s, ws, now), T = Pay.totals(rows);
     const open = s.shifts.filter(x => x.out == null).sort((a, b) => a.in - b.in), onBreak = open.filter(openBreak).length;
     const calcs = Pay.calcAll(s, now, { from: +startOfWeek(now) - 86400000 });
     const lateToday = s.shifts.filter(x => ymd(x.in) === ymd(now) && (calcs.get(x.id)?.lateMin ?? 0) > num(s.settings.roundGraceMin)).length;
@@ -487,7 +484,7 @@ const Views = {
       <div class="kpis">
         ${kpi('On shift now', open.length - onBreak)}${kpi('On break now', onBreak)}
         ${kpi('Paid hours · week', fmtHM(T.paid))}${kpi('Net payroll · week', money(T.net))}
-        ${kpi('Active staff', s.employees.filter(e => e.active !== false).length)}${kpi('Late today', lateToday, lateToday ? 'alert' : '')}${kpi('Alerts', alerts.length, alerts.length ? 'alert' : '')}
+        ${kpi('Active staff', s.employees.filter(e => e.active !== false).length)}${kpi('Late today', lateToday, lateToday ? 'alert' : '')}
       </div>
       <div class="cols">
         <div class="section"><h3>On the clock now (${open.length})</h3>
@@ -507,13 +504,6 @@ const Views = {
           ${soon.length ? html`<ul class="alerts">${soon.map(u => html`<li class="lvl-low"><span>${u.kind === 'birthday' ? '🎂' : '🎉'} <b>${u.name}</b> · ${u.kind === 'birthday' ? 'birthday' : `${u.years}-year work anniversary`}</span>
             <b>${u.inDays === 0 ? 'TODAY' : u.inDays === 1 ? 'tomorrow' : `in ${u.inDays} days`}</b></li>`)}</ul>`
             : html`<span class="muted">No birthdays or anniversaries this week.</span>`}
-        </div>
-        <div class="section"><h3>Alerts (${alerts.length})</h3>
-          ${alerts.length ? html`<ul class="alerts">${alerts.map(a => html`<li class="lvl-${a.level}"><span>${a.msg}</span>
-            ${a.shiftId ? html`<button class="sm" data-act="editShift" data-id="${a.shiftId}">Fix</button>`
-              : a.empId ? html`<button class="sm" data-act="editEmp" data-id="${a.empId}">Fix</button>`
-              : a.tab ? html`<button class="sm" data-act="tab" data-k="${a.tab}">Open</button>` : ''}</li>`)}</ul>`
-          : html`<span class="muted">All clear.</span>`}
         </div>
       </div>
       <div class="cols">
