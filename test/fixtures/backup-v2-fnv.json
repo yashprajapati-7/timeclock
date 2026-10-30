@@ -1,0 +1,153 @@
+{
+ "v": 2,
+ "settings": {
+  "company": "Fixture Co",
+  "currency": "₹",
+  "tierHours": 24,
+  "breakMode": "greater",
+  "breakRules": [
+   {
+    "h": 4,
+    "m": 15
+   },
+   {
+    "h": 5,
+    "m": 30
+   },
+   {
+    "h": 7,
+    "m": 60
+   },
+   {
+    "h": 10,
+    "m": 90
+   }
+  ],
+  "theme": "auto",
+  "kioskIdleSec": 20,
+  "adminTimeoutMin": 5,
+  "maxShiftHours": 14,
+  "defaultPin": false,
+  "adminSalt": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+  "adminPinHash": "fnv:8b67a65"
+ },
+ "employees": [
+  {
+   "id": "e1",
+   "name": "Alice Smith",
+   "pin": "1111",
+   "rate1": "20",
+   "rate2": "30",
+   "active": true
+  },
+  {
+   "id": "e2",
+   "name": "Bob Jones",
+   "pin": "2222",
+   "rate1": "18.5",
+   "rate2": "25",
+   "active": true
+  },
+  {
+   "id": "e3",
+   "name": "Cara Old",
+   "pin": "3333",
+   "rate1": "15",
+   "rate2": "15",
+   "active": false
+  }
+ ],
+ "shifts": [
+  {
+   "id": "s1",
+   "empId": "e1",
+   "in": 1792965600000,
+   "out": 1792994400000,
+   "breaks": [
+    {
+     "start": 1792976400000,
+     "end": 1792978200000
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "empId": "e1",
+   "in": 1793052000000,
+   "out": 1793073600000,
+   "breaks": []
+  },
+  {
+   "id": "s3",
+   "empId": "e2",
+   "in": 1792980000000,
+   "out": 1793012400000,
+   "breaks": [
+    {
+     "start": 1792994400000,
+     "end": 1792995600000
+    },
+    {
+     "start": 1793001600000,
+     "end": 1793002500000
+    }
+   ]
+  },
+  {
+   "id": "s4",
+   "empId": "e2",
+   "in": 1793530800000,
+   "out": 1793559600000,
+   "breaks": []
+  },
+  {
+   "id": "s5",
+   "empId": "e3",
+   "in": 1793134800000,
+   "out": 1793149200000,
+   "breaks": []
+  },
+  {
+   "id": "s6",
+   "empId": "e1",
+   "in": 1793311200000,
+   "out": null,
+   "breaks": [
+    {
+     "start": 1793318400000,
+     "end": null
+    }
+   ]
+  }
+ ],
+ "adj": {
+  "2026-10-26|e1": [
+   {
+    "type": "allowance",
+    "label": "Travel",
+    "amount": 50
+   }
+  ],
+  "2026-10-26|e2": [
+   {
+    "type": "deduction",
+    "label": "Uniform",
+    "amount": 12.5
+   }
+  ]
+ },
+ "audit": [
+  {
+   "ts": 1792965600000,
+   "actor": "Alice Smith",
+   "action": "Clock in",
+   "detail": ""
+  },
+  {
+   "ts": 1792962000000,
+   "actor": "Admin",
+   "action": "Admin login",
+   "detail": ""
+  }
+ ]
+}

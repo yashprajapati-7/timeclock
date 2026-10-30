@@ -1,0 +1,1228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Time Clock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#000;--paper:#fff;--muted:#666;--soft:#f0f0f0;--warn:#c4001a}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--ink:#ececec;--paper:#121212;--muted:#9a9a9a;--soft:#222;--warn:#ff6b7d}
+}
+:root[data-theme="dark"]{--ink:#ececec;--paper:#121212;--muted:#9a9a9a;--soft:#222;--warn:#ff6b7d}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--paper);color:var(--ink);font-family:'Space Mono',ui-monospace,Consolas,monospace;font-size:15px}
+button,.btn{font:inherit;cursor:pointer;background:var(--paper);color:var(--ink);border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);padding:10px 16px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-radius:0;display:inline-block;font-size:15px;margin:0}
+button:active,.btn:active{transform:translate(4px,4px);box-shadow:none}
+button.inv{background:var(--ink);color:var(--paper)}
+button.sm,.btn.sm{padding:4px 10px;font-size:12px;box-shadow:2px 2px 0 var(--ink);border-width:2px}
+button.sm:active,.btn.sm:active{transform:translate(2px,2px);box-shadow:none}
+button:disabled{opacity:.35;cursor:not-allowed}
+button:focus-visible,.btn:focus-within{outline:3px dashed var(--ink);outline-offset:3px}
+input,select{font:inherit;border:3px solid var(--ink);padding:8px 10px;background:var(--paper);color:var(--ink);border-radius:0;width:100%}
+input:focus,select:focus{outline:3px dashed var(--ink);outline-offset:2px}
+label{display:block;font-size:12px;font-weight:700;text-transform:uppercase;margin-bottom:4px}
+small,.muted{color:var(--muted)}
+.hidden{display:none!important}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:4px solid var(--ink);flex-wrap:wrap}
+.brand{font-weight:700;font-size:20px;letter-spacing:.08em;text-transform:uppercase}
+.brand::before{content:"";display:inline-block;width:14px;height:14px;background:var(--ink);margin-right:10px;vertical-align:middle}
+
+/* Kiosk */
+.kiosk{display:grid;grid-template-columns:1fr 1fr;gap:28px;padding:28px;max-width:1100px;margin:0 auto}
+.card{border:4px solid var(--ink);box-shadow:8px 8px 0 var(--ink);padding:28px;background:var(--paper)}
+.clockcard{display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;min-height:420px}
+.big{font-size:clamp(48px,9vw,96px);font-weight:700;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.date{margin-top:12px;font-size:18px;text-transform:uppercase}
+.onnow{margin-top:28px;border-top:3px solid var(--ink);padding-top:14px;width:100%;font-size:13px}
+.lbl{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;text-align:center}
+.pins{display:flex;gap:12px;justify-content:center;margin:18px 0 22px}
+.pins span{width:52px;height:60px;border:3px solid var(--ink);display:flex;align-items:center;justify-content:center;font-size:28px}
+.pins span.f{background:var(--ink);color:var(--paper)}
+.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.keys button{font-size:26px;padding:14px 0}
+.shake{animation:shake .35s}
+@keyframes shake{20%,60%{transform:translateX(-10px)}40%,80%{transform:translateX(10px)}}
+.name{font-size:30px;font-weight:700;text-align:center;margin:6px 0 10px;text-transform:uppercase}
+.status{border:3px solid var(--ink);padding:12px;text-align:center;margin-bottom:16px;background:var(--soft)}
+.status b{font-variant-numeric:tabular-nums}
+.mini{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px}
+.mini div{border:3px solid var(--ink);padding:8px 10px;display:flex;justify-content:space-between;align-items:baseline}
+.mini .k{font-size:11px;text-transform:uppercase;font-weight:700}
+.progress{height:14px;border:3px solid var(--ink);margin-bottom:4px}
+.progress i{display:block;height:100%;background:var(--ink)}
+.acts{display:grid;gap:14px;margin-top:18px}
+.acts button{font-size:20px;padding:18px}
+.acts button.sm{font-size:12px;padding:6px}
+
+/* Admin */
+.tabs{display:flex;gap:0;border-bottom:4px solid var(--ink);overflow-x:auto}
+.tabs button{border:0;border-right:3px solid var(--ink);box-shadow:none;padding:14px 22px;white-space:nowrap}
+.tabs button:active{transform:none}
+.tabs button.on{background:var(--ink);color:var(--paper)}
+.badge{display:inline-block;min-width:20px;padding:0 5px;background:var(--warn);color:#fff;font-size:11px;text-align:center}
+.wrap{padding:22px;max-width:1400px;margin:0 auto}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:16px}
+.row.tight{margin:0}
+.weeknav b{font-size:16px;padding:0 6px}
+.tablewrap{overflow-x:auto;border:3px solid var(--ink);box-shadow:6px 6px 0 var(--ink);margin-bottom:22px}
+.scrollx{overflow-x:auto}
+.scrollx svg{min-width:720px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{border:1px solid var(--ink);padding:8px;text-align:right;white-space:nowrap;vertical-align:top}
+th{background:var(--ink);color:var(--paper);text-transform:uppercase;font-size:11px;letter-spacing:.05em}
+th .thbtn{all:unset;cursor:pointer}
+th .thbtn:focus-visible{outline:2px dashed var(--paper);outline-offset:2px}
+td.l,th.l{text-align:left}
+td.wrap-text{white-space:normal;min-width:220px}
+tr.tot td{font-weight:700;border-top:3px solid var(--ink);background:var(--soft)}
+td.net{font-weight:700}
+.tag{display:inline-block;border:2px solid var(--ink);padding:0 6px;font-size:11px;font-weight:700}
+.tag.b{background:var(--ink);color:var(--paper)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:16px}
+.grid.one{grid-template-columns:1fr}
+.grid.two{grid-template-columns:1fr 1fr}
+.dyn{grid-template-columns:1fr 1fr auto;align-items:end}
+.section{border:3px solid var(--ink);padding:18px;margin-bottom:22px}
+.section h3{margin:0 0 14px;text-transform:uppercase;font-size:15px;letter-spacing:.06em}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr));gap:0 22px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:22px}
+.kpi{border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);padding:14px}
+.kpi .v{font-size:26px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi .k{font-size:11px;text-transform:uppercase;font-weight:700;letter-spacing:.05em;margin-top:6px}
+.kpi.alert .v{color:var(--warn)}
+.alerts{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.alerts li{display:flex;justify-content:space-between;gap:12px;align-items:center;border:2px solid var(--ink);border-left-width:8px;padding:8px 10px;font-size:13px}
+.alerts li.lvl-high{border-left-color:var(--warn)}
+.alerts li.lvl-low{border-left-color:var(--muted)}
+h2.title{margin:0 0 12px;text-transform:uppercase}
+
+svg.chart{width:100%;height:auto;display:block}
+svg .c-ink{fill:var(--ink)} svg .c-paper{fill:var(--paper)} svg .c-muted{fill:var(--muted)} svg .c-warn{fill:var(--warn)}
+svg .s-ink{stroke:var(--ink)} svg .s-grid{stroke:var(--muted);stroke-opacity:.35} svg .s-warn{stroke:var(--warn)}
+svg text{font-family:'Space Mono',ui-monospace,monospace;font-size:12px}
+svg .tl-shift{cursor:pointer}
+svg .tl-shift:hover rect{opacity:.8}
+
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:20}
+.modal .box{background:var(--paper);border:4px solid var(--ink);box-shadow:10px 10px 0 var(--ink);padding:24px;width:100%;max-width:560px}
+.modal h2{margin:0 0 16px;text-transform:uppercase;font-size:18px}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:14px 20px;font-weight:700;border:3px solid var(--paper);outline:3px solid var(--ink);z-index:30;max-width:calc(100% - 32px);text-align:center;display:flex;gap:14px;align-items:center}
+.toast button{border-color:var(--paper);box-shadow:none}
+
+@media (max-width:820px){
+  .kiosk{grid-template-columns:1fr;padding:16px;gap:20px}
+  .clockcard{min-height:auto}
+  .wrap{padding:16px}
+  .bar{padding:12px 16px}
+  .grid.two{grid-template-columns:1fr}
+}
+@media print{
+  .noprint{display:none!important}
+  .tablewrap{box-shadow:none;overflow:visible}
+  body{font-size:11px}
+  th,td{padding:4px}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="box" id="modalBox"></div></div>
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+<noscript><p style="padding:20px">This time clock needs JavaScript enabled.</p></noscript>
+
+<script>
+'use strict';
+/*
+  Architecture
+  - Store:  single source of truth, schema migrations, undo stack, audit trail, cross-tab sync.
+  - Pay:    pure calculations (breaks, tiered pay, anomalies).
+  - Views:  render functions returning auto-escaped `html` templates.
+  - Actions / Forms / Changes / Inputs: one delegated listener per event type (data-act, data-submit, …).
+*/
+
+// ---------- Utilities ----------
+const H = 3600000, MIN = 60000;
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const pad = n => String(n).padStart(2, '0');
+const num = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const trunc = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+const initials = name => String(name || '?').split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 3).toUpperCase();
+
+// Auto-escaping templates: every ${value} is HTML-escaped unless it is already a Safe fragment.
+const ESC = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ESC[c]);
+class Safe { constructor(s){ this.s = s; } toString(){ return this.s; } }
+const part = v => v == null || v === false ? '' : v instanceof Safe ? v.s : Array.isArray(v) ? v.map(part).join('') : esc(v);
+const html = (strings, ...vals) => new Safe(strings.reduce((out, s, i) => out + s + (i < vals.length ? part(vals[i]) : ''), ''));
+
+// Dates & formatting
+const ymd = d => { d = new Date(d); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const toLocalInput = ts => { if(ts == null) return ''; const d = new Date(ts); return `${ymd(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const fromLocalInput = v => v ? new Date(v).getTime() : null;
+const fmtTime = ts => new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+const fmtDay = ts => new Date(ts).toLocaleDateString([], {weekday:'short', day:'2-digit', month:'short'});
+const fmtStamp = ts => new Date(ts).toLocaleString([], {day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit'});
+const fmtHM = h => { const m = Math.round(h * 60), a = Math.abs(m); return (m < 0 ? '-' : '') + Math.floor(a / 60) + ':' + pad(a % 60); };
+const fmtMin = m => fmtHM(m / 60);
+const fmtElapsed = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 3600)}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`; };
+const money = n => (n < 0 ? '-' : '') + db().settings.currency + Math.abs(n).toFixed(2);
+const dayIndex = ts => (new Date(ts).getDay() + 6) % 7;
+function startOfWeek(d){ d = new Date(d); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - dayIndex(d)); return d; }
+function addDays(d, n){ d = new Date(d); d.setDate(d.getDate() + n); return d; }
+const niceStep = x => { const p = 10 ** Math.floor(Math.log10(x)), f = x / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; };
+
+function download(name, text, type){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], {type}));
+  a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const CSV = {
+  // Prefix text that a spreadsheet would treat as a formula.
+  cell: v => { v = String(v ?? ''); if(/^[=+\-@]/.test(v) && !/^-?\d/.test(v)) v = "'" + v; return `"${v.replace(/"/g, '""')}"`; },
+  build: rows => '﻿' + rows.map(r => r.map(CSV.cell).join(',')).join('\r\n')
+};
+
+// ---------- PIN hashing ----------
+const Hash = {
+  salt(){ const a = new Uint8Array(16); crypto.getRandomValues(a); return [...a].map(b => b.toString(16).padStart(2, '0')).join(''); },
+  async make(pin, salt, scheme = globalThis.crypto?.subtle ? 'sha256' : 'fnv'){
+    const input = `${salt}:${pin}`;
+    if(scheme === 'sha256'){
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+      return 'sha256:' + [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    let h = 0x811c9dc5;  // FNV-1a fallback for non-secure contexts
+    for(let i = 0; i < input.length; i++){ h ^= input.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return 'fnv:' + h.toString(16);
+  },
+  async verify(pin, salt, stored){
+    if(!stored || !salt) return false;
+    try{ return await Hash.make(pin, salt, stored.split(':')[0]) === stored; }
+    catch(e){ return false; }
+  }
+};
+
+// ---------- Store ----------
+const Store = (() => {
+  const KEY = 'timeclock.v2', LEGACY_KEY = 'timeclock.v1', SCHEMA = 2, MAX_AUDIT = 1000, MAX_UNDO = 30;
+  const defaults = () => ({
+    v: SCHEMA,
+    settings: {
+      company: 'Time Clock',
+      currency: '$',
+      tierHours: 24,            // pay rate 1 for the first N paid hours of the week, rate 2 after
+      breakMode: 'greater',     // policy | actual | greater
+      breakRules: [ {h:4,m:15}, {h:5,m:30}, {h:7,m:60}, {h:10,m:90} ],
+      theme: 'auto',            // auto | light | dark
+      kioskIdleSec: 20,
+      adminTimeoutMin: 5,
+      maxShiftHours: 14,        // open shifts longer than this are flagged
+      adminPinHash: null, adminSalt: null, defaultPin: true
+    },
+    employees: [],              // {id,name,pin,rate1,rate2,active}
+    shifts: [],                 // {id,empId,in,out,breaks:[{start,end}]}
+    adj: {},                    // 'YYYY-MM-DD|empId' -> [{type,label,amount}]
+    audit: []                   // {ts,actor,action,detail}, newest first
+  });
+  const migrations = {
+    1: d => ({ ...d, v: 2, audit: [] })   // v1 → v2: audit trail; plaintext admin PIN is hashed at boot
+  };
+  function normalize(d){
+    if(!d || typeof d !== 'object') return defaults();
+    while((d.v || 1) < SCHEMA) d = migrations[d.v || 1](d);
+    const base = defaults();
+    return { ...base, ...d, settings: { ...base.settings, ...(d.settings || {}) }, audit: Array.isArray(d.audit) ? d.audit : [] };
+  }
+  const valid = d => !!d && Array.isArray(d.employees) && Array.isArray(d.shifts);
+
+  let state = defaults(), undo = [];
+  const subs = new Set();
+  const emit = () => subs.forEach(fn => fn(state));
+  function readDisk(){
+    try{
+      const raw = localStorage.getItem(KEY) ?? localStorage.getItem(LEGACY_KEY);
+      if(raw) return normalize(JSON.parse(raw));
+    }catch(e){ console.error('Could not read saved data', e); }
+    return defaults();
+  }
+  function persist(){
+    try{ localStorage.setItem(KEY, JSON.stringify(state)); }
+    catch(e){ Toast.show('WARNING: could not save data in this browser', {ms:6000}); }
+  }
+  function log(actor, action, detail = ''){
+    state.audit.unshift({ ts: Date.now(), actor, action, detail });
+    if(state.audit.length > MAX_AUDIT) state.audit.length = MAX_AUDIT;
+  }
+  return {
+    KEY, MAX_AUDIT, defaults, valid,
+    get state(){ return state; },
+    get undoLabel(){ return undo.at(-1)?.action ?? null; },
+    load(){ state = readDisk(); },
+    subscribe(fn){ subs.add(fn); return () => subs.delete(fn); },
+    // mutate(state) may return false to abort, or a string used as audit detail.
+    commit(action, mutate, { actor = 'Admin', detail = '', undoable = true } = {}){
+      const before = JSON.stringify(state);
+      const r = mutate(state);
+      if(r === false) return false;
+      if(undoable){ undo.push({ action, before }); if(undo.length > MAX_UNDO) undo.shift(); }
+      log(actor, action, typeof r === 'string' ? r : detail);
+      persist(); emit(); return true;
+    },
+    undo(){
+      const u = undo.pop(); if(!u) return null;
+      const audit = state.audit;
+      state = JSON.parse(u.before); state.audit = audit;
+      log('Admin', 'Undo', u.action); persist(); emit();
+      return u.action;
+    },
+    clearUndo(){ undo = []; },
+    log(actor, action, detail){ log(actor, action, detail); persist(); },
+    replace(d, action){ state = normalize(d); undo = []; log('Admin', action); persist(); emit(); },
+    syncFromDisk(){ state = readDisk(); undo = []; emit(); }
+  };
+})();
+const db = () => Store.state;
+const empById = id => db().employees.find(e => e.id === id);
+const empName = id => empById(id)?.name ?? '(deleted)';
+const openShift = empId => db().shifts.find(s => s.empId === empId && s.out == null);
+const openBreak = sh => sh && sh.breaks.find(b => b.end == null);
+
+// ---------- Break & pay calculation ----------
+const Pay = {
+  policyBreak(hours, rules){
+    let m = 0;
+    for(const r of [...rules].sort((a, b) => a.h - b.h)) if(hours >= r.h) m = num(r.m);
+    return m;
+  },
+  shift(sh, st = db().settings, now = Date.now()){
+    const end = sh.out ?? now;
+    const totalMin = Math.max(0, Math.round((end - sh.in) / MIN));
+    const actual = sh.breaks.reduce((a, b) => a + Math.max(0, Math.round(((b.end ?? now) - b.start) / MIN)), 0);
+    const policy = Pay.policyBreak(totalMin / 60, st.breakRules);
+    const ded = Math.min(totalMin, st.breakMode === 'policy' ? policy : st.breakMode === 'actual' ? actual : Math.max(policy, actual));
+    return { total: totalMin / 60, actual, policy, ded, paid: (totalMin - ded) / 60, open: sh.out == null };
+  },
+  week(ws, now = Date.now()){
+    const s = db(), a = +ws, b = +addDays(ws, 7), key = ymd(ws), tier = num(s.settings.tierHours);
+    const rows = [];
+    for(const e of s.employees){
+      const shifts = s.shifts.filter(x => x.empId === e.id && x.in >= a && x.in < b);
+      const adj = s.adj[`${key}|${e.id}`] || [];
+      if(!shifts.length && !adj.length && e.active === false) continue;
+      const days = Array(7).fill(0); let total = 0, ded = 0, paid = 0, open = false;
+      for(const sh of shifts){
+        const c = Pay.shift(sh, s.settings, now);
+        days[dayIndex(sh.in)] += c.paid;
+        total += c.total; ded += c.ded; paid += c.paid; open ||= c.open;
+      }
+      const h1 = Math.min(paid, tier), h2 = Math.max(0, paid - tier);
+      const r1 = num(e.rate1), r2 = num(e.rate2);
+      const p1 = h1 * r1, p2 = h2 * r2, gross = p1 + p2;
+      const sum = type => adj.filter(x => x.type === type).reduce((acc, x) => acc + num(x.amount), 0);
+      const allow = sum('allowance'), deduct = sum('deduction');
+      rows.push({ e, shifts, days, total, ded, paid, h1, h2, r1, r2, p1, p2, gross, allow, deduct, net: gross + allow - deduct, open });
+    }
+    return rows;
+  },
+  totals(rows){
+    const keys = ['total','ded','paid','h1','h2','p1','p2','gross','allow','deduct','net'];
+    const T = Object.fromEntries(keys.map(k => [k, 0])); T.days = Array(7).fill(0);
+    for(const r of rows){ keys.forEach(k => T[k] += r[k]); r.days.forEach((d, i) => T.days[i] += d); }
+    return T;
+  },
+  // Things an admin should look at: forgotten clock-outs, long breaks, overlaps, missing rates.
+  anomalies(ws, now = Date.now()){
+    const s = db(), out = [], maxH = num(s.settings.maxShiftHours) || 14;
+    if(s.settings.defaultPin) out.push({ level:'high', msg:'Admin PIN is still the default (0000). Change it in Settings.', tab:'settings' });
+    for(const sh of s.shifts){
+      if(sh.out == null && now - sh.in > maxH * H)
+        out.push({ level:'high', msg:`${empName(sh.empId)} has been clocked in for ${fmtHM((now - sh.in) / H)}. Missed clock-out?`, shiftId: sh.id });
+      const b = openBreak(sh);
+      if(b && now - b.start > 2 * H)
+        out.push({ level:'med', msg:`${empName(sh.empId)} has been on break for ${fmtHM((now - b.start) / H)}.`, shiftId: sh.id });
+    }
+    const a = +ws, b = +addDays(ws, 7), byEmp = {};
+    for(const sh of s.shifts) if(sh.in >= a && sh.in < b) (byEmp[sh.empId] ||= []).push(sh);
+    for(const list of Object.values(byEmp)){
+      list.sort((x, y) => x.in - y.in);
+      for(let i = 1; i < list.length; i++)
+        if((list[i - 1].out ?? Infinity) > list[i].in)
+          out.push({ level:'high', msg:`${empName(list[i].empId)}: overlapping shifts on ${fmtDay(list[i].in)}.`, shiftId: list[i].id });
+    }
+    for(const e of s.employees)
+      if(e.active !== false && (e.rate1 === '' || e.rate1 == null)) out.push({ level:'low', msg:`${e.name} has no pay rate set.`, empId: e.id });
+    return out;
+  }
+};
+
+// ---------- Toast & modal ----------
+const Toast = (() => {
+  let t;
+  return {
+    show(msg, { ms = 3500, action } = {}){
+      const el = $('#toast');
+      el.innerHTML = html`<span>${msg}</span>${action ? html`<button class="sm" data-act="${action.act}">${action.label}</button>` : ''}`;
+      el.classList.remove('hidden');
+      clearTimeout(t); t = setTimeout(() => el.classList.add('hidden'), action ? Math.max(ms, 6000) : ms);
+    }
+  };
+})();
+
+const Modal = (() => {
+  const root = () => $('#modal'), box = () => $('#modalBox');
+  let lastFocus = null, resolver = null;
+  const api = {
+    typed: null,
+    isOpen: () => !root().classList.contains('hidden'),
+    open(content){
+      if(!api.isOpen()) lastFocus = document.activeElement;
+      resolver?.(false); resolver = null; api.typed = null;
+      box().innerHTML = content;
+      root().classList.remove('hidden');
+      (box().querySelector('[autofocus]') || box().querySelector('input,select,button'))?.focus();
+    },
+    close(result = false){
+      if(!api.isOpen()) return;
+      root().classList.add('hidden'); box().innerHTML = '';
+      const r = resolver; resolver = null; r?.(result);
+      if(lastFocus?.isConnected) lastFocus.focus();
+    },
+    confirm(message, { title = 'Are you sure?', ok = 'Confirm', typed = null } = {}){
+      api.open(html`<form data-submit="confirmOk"><h2 id="modalTitle">${title}</h2><p>${message}</p>
+        ${typed ? html`<label for="cfTyped">Type ${typed} to confirm</label><input id="cfTyped" name="typed" autocomplete="off" autofocus>` : ''}
+        <div class="row" style="margin-top:18px"><button class="inv" type="submit" ${typed ? '' : 'autofocus'}>${ok}</button><button type="button" data-act="modalCancel">Cancel</button></div></form>`);
+      api.typed = typed;
+      return new Promise(res => { resolver = res; });
+    },
+    onKey(ev){
+      if(ev.key === 'Escape'){ ev.preventDefault(); api.close(false); return; }
+      if(ev.key !== 'Tab') return;
+      const f = $$('button:not([disabled]),input:not([disabled]),select,textarea,[tabindex]:not([tabindex="-1"])', box()).filter(el => el.offsetParent !== null);
+      if(!f.length) return;
+      const first = f[0], last = f.at(-1);
+      if(ev.shiftKey && document.activeElement === first){ last.focus(); ev.preventDefault(); }
+      else if(!ev.shiftKey && document.activeElement === last){ first.focus(); ev.preventDefault(); }
+    }
+  };
+  return api;
+})();
+
+// ---------- Charts ----------
+function barChart(items, { ref = null, height = 230, fmt = fmtHM } = {}){
+  const W = 640, L = 44, R = 8, T = 22, B = 30, plotW = W - L - R, plotH = height - T - B;
+  const n = Math.max(items.length, 1), slot = plotW / n, bw = Math.min(56, slot * 0.68);
+  const top = Math.max(1, ref ?? 0, ...items.map(i => i.value));
+  const step = niceStep(top / 4), max = Math.ceil(top * 1.08 / step) * step;
+  const y = v => T + plotH - (v / max) * plotH;
+  const ticks = []; for(let v = 0; v <= max + 1e-9; v += step) ticks.push(v);
+  return html`<svg class="chart" viewBox="0 0 ${W} ${height}" role="img" aria-label="${items.map(i => `${i.label}: ${fmt(i.value)}`).join(', ')}">
+    ${ticks.map(v => html`<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" class="s-grid"/>
+      <text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" class="c-muted">${Math.round(v * 10) / 10}h</text>`)}
+    ${items.map((it, i) => {
+      const x = L + slot * i + (slot - bw) / 2;
+      return html`<g><title>${it.label}: ${fmt(it.value)}</title>
+        <rect x="${x}" y="${y(it.value)}" width="${bw}" height="${Math.max(0, y(0) - y(it.value))}" class="c-ink"/>
+        ${it.value > 0 ? html`<text x="${x + bw / 2}" y="${y(it.value) - 6}" text-anchor="middle" class="c-ink" font-weight="700">${fmt(it.value)}</text>` : ''}
+        <text x="${x + bw / 2}" y="${height - 10}" text-anchor="middle" class="c-ink">${trunc(it.label, Math.max(3, Math.floor(slot / 8)))}</text></g>`;
+    })}
+    <line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" class="s-ink" stroke-width="2"/>
+    ${ref ? html`<line x1="${L}" x2="${W - R}" y1="${y(ref)}" y2="${y(ref)}" class="s-warn" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="${W - R}" y="${y(ref) - 6}" text-anchor="end" class="c-warn" font-weight="700">${ref}h</text>` : ''}
+  </svg>`;
+}
+
+// Week timeline: one row per day, shifts drawn by time of day, breaks hatched, overlaps stacked in lanes.
+function timeline(ws, empFilter){
+  const now = Date.now(), a = +ws, b = +addDays(ws, 7);
+  const list = db().shifts.filter(s => (!empFilter || s.empId === empFilter) && s.in < b && (s.out ?? now) > a);
+  const W = 1000, L = 84, R = 10, T = 26, rowH = 38, Ht = T + rowH * 7 + 6;
+  const X = h => L + (h / 24) * (W - L - R);
+  const rows = DAYS.map((d, i) => {
+    const ds = +addDays(ws, i), de = +addDays(ws, i + 1), span = (de - ds) / H;
+    const hx = t => X(((t - ds) / H) * 24 / span);
+    const segs = list.map(s => ({ s, from: Math.max(s.in, ds), to: Math.min(s.out ?? now, de) }))
+      .filter(g => g.to > g.from).sort((p, q) => p.from - q.from);
+    const laneEnd = [];
+    for(const g of segs){
+      let l = laneEnd.findIndex(t => t <= g.from);
+      if(l < 0){ l = laneEnd.length; laneEnd.push(0); }
+      laneEnd[l] = g.to; g.lane = l;
+    }
+    const lh = (rowH - 8) / Math.max(1, laneEnd.length), y0 = T + i * rowH + 4;
+    return html`<g>
+      <text x="${L - 10}" y="${T + i * rowH + rowH / 2 + 4}" text-anchor="end" class="c-ink" font-weight="700">${d} ${new Date(ds).getDate()}</text>
+      <line x1="${L}" x2="${W - R}" y1="${T + (i + 1) * rowH}" y2="${T + (i + 1) * rowH}" class="s-grid"/>
+      ${segs.map(g => {
+        const e = empById(g.s.empId), x1 = hx(g.from), x2 = hx(g.to), y = y0 + g.lane * lh, open = g.s.out == null;
+        return html`<g class="tl-shift" data-act="editShift" data-id="${g.s.id}">
+          <title>${e?.name ?? '(deleted)'} · ${fmtTime(g.s.in)}–${open ? 'now' : fmtTime(g.s.out)}</title>
+          <rect x="${x1}" y="${y}" width="${Math.max(2, x2 - x1)}" height="${lh - 2}" class="${open ? 'c-paper s-ink' : 'c-ink'}" stroke-width="2"/>
+          ${g.s.breaks.map(bk => {
+            const f = Math.max(bk.start, g.from), t = Math.min(bk.end ?? now, g.to);
+            return t > f ? html`<rect x="${hx(f)}" y="${y}" width="${Math.max(1, hx(t) - hx(f))}" height="${lh - 2}" fill="url(#hatch)" class="s-ink" stroke-width="1"/>` : '';
+          })}
+          ${x2 - x1 > 34 && lh > 12 ? html`<text x="${x1 + 5}" y="${y + lh / 2 + 3}" class="${open ? 'c-ink' : 'c-paper'}" font-size="11" font-weight="700">${initials(e?.name)}</text>` : ''}
+        </g>`;
+      })}
+      ${now >= ds && now < de ? html`<line x1="${hx(now)}" x2="${hx(now)}" y1="${y0 - 3}" y2="${y0 + rowH - 5}" class="s-warn" stroke-width="2"/>` : ''}
+    </g>`;
+  });
+  return html`<svg class="chart" viewBox="0 0 ${W} ${Ht}" role="img" aria-label="Shift timeline for the week">
+    <defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" class="c-paper"/><line x1="0" y1="0" x2="0" y2="6" class="s-ink" stroke-width="2.5"/></pattern></defs>
+    ${[0,3,6,9,12,15,18,21,24].map(h => html`<line x1="${X(h)}" x2="${X(h)}" y1="${T - 4}" y2="${Ht - 6}" class="s-grid"/>
+      <text x="${X(h)}" y="${T - 9}" text-anchor="middle" class="c-muted" font-size="11">${pad(h % 24)}:00</text>`)}
+    ${rows}
+  </svg>`;
+}
+
+// ---------- UI state ----------
+const app = $('#app');
+const ui = { view: 'kiosk', tab: 'dashboard', weekStart: startOfWeek(new Date()), shiftFilter: '', empQuery: '', auditQuery: '', sort: { k: 'name', dir: 1 }, showPins: false };
+
+function applyTheme(){
+  const t = db().settings.theme;
+  if(t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  else delete document.documentElement.dataset.theme;
+}
+function render(){ applyTheme(); ui.view === 'kiosk' ? Kiosk.render() : Admin.render(); }
+function tickLive(now = Date.now()){
+  $$('[data-elapsed]').forEach(el => el.textContent = fmtElapsed(now - +el.dataset.elapsed));
+  $$('[data-countdown]').forEach(el => el.textContent = Math.max(0, Math.ceil((+el.dataset.countdown - now) / 1000)));
+}
+
+// ---------- Kiosk ----------
+const Kiosk = {
+  pin: '', current: null, idleT: 0, idleDeadline: 0, fails: 0, lockUntil: 0,
+  render(){
+    app.innerHTML = html`
+      <header class="bar"><div class="brand">${db().settings.company}</div>
+        <button class="sm" data-act="openAdmin">Admin</button></header>
+      <main class="kiosk">
+        <section class="card clockcard" aria-label="Current time">
+          <div class="big" id="clk"></div><div class="date" id="dt"></div>
+          <div class="onnow" id="onnow"></div>
+        </section>
+        <section class="card" id="pad" aria-live="polite"></section>
+      </main>`;
+    Kiosk.tick(Date.now());
+    Kiosk.current ? Kiosk.renderEmp() : Kiosk.renderPad();
+  },
+  tick(now){
+    const c = $('#clk'); if(!c) return;
+    const n = new Date(now), s = db();
+    c.textContent = `${pad(n.getHours())}:${pad(n.getMinutes())}:${pad(n.getSeconds())}`;
+    $('#dt').textContent = n.toLocaleDateString([], {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    const working = s.shifts.filter(x => x.out == null), onBreak = working.filter(openBreak).length;
+    $('#onnow').textContent = s.employees.length
+      ? `ON SHIFT: ${working.length - onBreak}  ·  ON BREAK: ${onBreak}`
+      : `No employees yet — tap ADMIN${s.settings.defaultPin ? ' (default PIN 0000)' : ''} to add staff.`;
+    if(Kiosk.lockUntil && now >= Kiosk.lockUntil){ Kiosk.lockUntil = 0; if(!Kiosk.current) Kiosk.renderPad(); }
+  },
+  renderPad(){
+    const box = $('#pad'); if(!box) return;
+    const locked = Date.now() < Kiosk.lockUntil, n = Kiosk.pin.length;
+    const keys = ['1','2','3','4','5','6','7','8','9','C','0','<'];
+    box.innerHTML = html`
+      <div class="lbl">${locked ? html`Too many attempts — wait <span data-countdown="${Kiosk.lockUntil}"></span>s` : 'Enter your 4-digit code'}</div>
+      <div class="pins" id="pins" aria-label="${n} of 4 digits entered">${[0,1,2,3].map(i => html`<span class="${i < n ? 'f' : ''}">${i < n ? '●' : ''}</span>`)}</div>
+      <div class="keys">${keys.map(k => html`<button data-act="press" data-k="${k}" ${locked ? 'disabled' : ''}
+        aria-label="${k === 'C' ? 'Clear' : k === '<' ? 'Delete' : k}">${k === '<' ? '⌫' : k}</button>`)}</div>`;
+    tickLive();
+  },
+  press(k){
+    if(Kiosk.current || Date.now() < Kiosk.lockUntil) return;
+    if(k === 'C') Kiosk.pin = '';
+    else if(k === '<') Kiosk.pin = Kiosk.pin.slice(0, -1);
+    else if(/^\d$/.test(k) && Kiosk.pin.length < 4) Kiosk.pin += k;
+    Kiosk.renderPad();
+    if(Kiosk.pin.length === 4) setTimeout(Kiosk.submit, 120);
+  },
+  submit(){
+    if(Kiosk.pin.length !== 4) return;
+    const e = db().employees.find(x => x.pin === Kiosk.pin && x.active !== false);
+    Kiosk.pin = '';
+    if(!e){
+      if(++Kiosk.fails >= 5){ Kiosk.lockUntil = Date.now() + 30000; Kiosk.fails = 0; Store.log('Kiosk', 'Keypad locked', '5 wrong codes'); }
+      Kiosk.renderPad(); $('#pins')?.classList.add('shake');
+      Toast.show('Code not recognised', {ms:1800}); return;
+    }
+    Kiosk.fails = 0; Kiosk.current = e.id; Kiosk.renderEmp();
+  },
+  reset(rerender){
+    Kiosk.current = null; Kiosk.pin = ''; clearTimeout(Kiosk.idleT);
+    if(rerender) Kiosk.renderPad();
+  },
+  statusHTML(sh, b, st, now){
+    if(!sh) return html`NOT CLOCKED IN`;
+    if(b) return html`ON BREAK <b data-elapsed="${b.start}"></b><br><small>Since ${fmtTime(b.start)} · clocked in ${fmtTime(sh.in)}</small>`;
+    return html`ON SHIFT <b data-elapsed="${sh.in}"></b><br><small>Since ${fmtTime(sh.in)} · break taken ${fmtMin(Pay.shift(sh, st, now).actual)}</small>`;
+  },
+  renderEmp(){
+    const box = $('#pad'); if(!box) return;
+    const e = empById(Kiosk.current); if(!e) return Kiosk.reset(true);
+    const now = Date.now(), st = db().settings, sh = openShift(e.id), b = openBreak(sh), today = ymd(now);
+    const weekPaid = Pay.week(startOfWeek(now), now).find(r => r.e.id === e.id)?.paid ?? 0;
+    const todayPaid = db().shifts.filter(x => x.empId === e.id && ymd(x.in) === today).reduce((a, x) => a + Pay.shift(x, st, now).paid, 0);
+    const tier = num(st.tierHours), pct = tier ? clamp(weekPaid / tier, 0, 1) : 1;
+    const acts = !sh ? html`<button class="inv" data-act="punch" data-k="in" data-primary>Clock in</button>`
+      : b ? html`<button class="inv" data-act="punch" data-k="be" data-primary>End break</button><button data-act="punch" data-k="out">Clock out</button>`
+      : html`<button class="inv" data-act="punch" data-k="bs" data-primary>Start break</button><button data-act="punch" data-k="out">Clock out</button>`;
+    Kiosk.idleDeadline = now + Math.max(5, num(st.kioskIdleSec)) * 1000;
+    box.innerHTML = html`
+      <div class="lbl">Hello</div><div class="name">${e.name}</div>
+      <div class="status">${Kiosk.statusHTML(sh, b, st, now)}</div>
+      <div class="mini"><div><span class="k">Today</span><b>${fmtHM(todayPaid)}</b></div><div><span class="k">This week</span><b>${fmtHM(weekPaid)}</b></div></div>
+      ${tier ? html`<div class="progress" role="progressbar" aria-label="Paid hours this week" aria-valuemin="0" aria-valuemax="${tier}" aria-valuenow="${weekPaid.toFixed(2)}"><i style="width:${(pct * 100).toFixed(1)}%"></i></div>
+        <small>${fmtHM(weekPaid)} of ${tier}h standard hours this week</small>` : ''}
+      <div class="acts">${acts}<button class="sm" data-act="kioskCancel">Cancel · <span data-countdown="${Kiosk.idleDeadline}"></span>s</button></div>`;
+    clearTimeout(Kiosk.idleT); Kiosk.idleT = setTimeout(() => Kiosk.reset(true), Kiosk.idleDeadline - now);
+    tickLive(now);
+  },
+  punch(type){
+    const e = empById(Kiosk.current); if(!e) return;
+    const now = Date.now(), LABEL = { in:'Clock in', bs:'Break start', be:'Break end', out:'Clock out' };
+    let msg = '';
+    Kiosk.reset(false);
+    Store.commit(LABEL[type], s => {
+      const sh = s.shifts.find(x => x.empId === e.id && x.out == null), b = sh?.breaks.find(x => x.end == null);
+      if(type === 'in' && !sh){
+        s.shifts.push({ id: uid(), empId: e.id, in: now, out: null, breaks: [] });
+        msg = `${e.name} clocked IN at ${fmtTime(now)}`;
+      } else if(type === 'bs' && sh && !b){
+        sh.breaks.push({ start: now, end: null });
+        msg = `${e.name} — break started at ${fmtTime(now)}`;
+      } else if(type === 'be' && b){
+        b.end = now;
+        msg = `${e.name} — break ended (${fmtMin(Math.round((b.end - b.start) / MIN))}). Back on shift.`;
+      } else if(type === 'out' && sh){
+        if(b) b.end = now;
+        sh.out = now;
+        const c = Pay.shift(sh, s.settings, now);
+        msg = `${e.name} clocked OUT at ${fmtTime(now)} · Worked ${fmtHM(c.total)} − break ${fmtMin(c.ded)} = PAID ${fmtHM(c.paid)}`;
+      } else return false;
+      return msg;
+    }, { actor: e.name, undoable: false });
+    if(msg) Toast.show(msg, {ms:6000});
+  }
+};
+
+// ---------- Admin ----------
+const Admin = {
+  lastActive: 0, renderedAt: 0, fails: 0, lockUntil: 0,
+  tabs: [['dashboard','Dashboard'],['report','Weekly Report'],['shifts','Shifts'],['employees','Employees'],['audit','Audit Log'],['settings','Settings']],
+  loginModal(){
+    const locked = Date.now() < Admin.lockUntil;
+    Modal.open(html`<form data-submit="adminLogin"><h2 id="modalTitle">Admin access</h2>
+      <label for="apin">Admin PIN</label><input id="apin" name="pin" type="password" inputmode="numeric" autocomplete="off" autofocus>
+      <p class="muted" id="loginMsg" aria-live="polite">${locked ? html`Locked — try again in <span data-countdown="${Admin.lockUntil}"></span>s` : ''}</p>
+      <div class="row"><button class="inv" type="submit">Enter</button><button type="button" data-act="modalCancel">Cancel</button></div></form>`);
+    tickLive();
+  },
+  logout(reason){
+    ui.view = 'kiosk'; Store.clearUndo();
+    Store.log('Admin', reason ? 'Admin auto-lock' : 'Admin logout', reason || '');
+    render(); if(reason) Toast.show(reason);
+  },
+  tick(now){
+    if(now - Admin.lastActive > Math.max(1, num(db().settings.adminTimeoutMin)) * MIN){
+      Modal.close(false); Admin.logout('Admin session locked after inactivity'); return;
+    }
+    if(ui.tab === 'dashboard' && !Modal.isOpen() && now - Admin.renderedAt > 30000) Admin.render();
+  },
+  render(){
+    const s = db(), undoLabel = Store.undoLabel, alerts = Pay.anomalies(startOfWeek(new Date())).length;
+    app.innerHTML = html`
+      <header class="bar noprint"><div class="brand">${s.settings.company} · Admin</div>
+        <div class="row tight">
+          ${undoLabel ? html`<button class="sm" data-act="undo" title="Undo: ${undoLabel}">↶ Undo ${trunc(undoLabel, 18)}</button>` : ''}
+          <button class="sm" data-act="themeCycle" title="Switch theme">◐ ${s.settings.theme}</button>
+          <button class="sm inv" data-act="logout">Lock · Back to clock</button>
+        </div></header>
+      <nav class="tabs noprint" role="tablist">${Admin.tabs.map(([k, l]) => html`<button role="tab" aria-selected="${ui.tab === k}" class="${ui.tab === k ? 'on' : ''}" data-act="tab" data-k="${k}">${l}${k === 'dashboard' && alerts ? html` <span class="badge" aria-label="${alerts} alerts">${alerts}</span>` : ''}</button>`)}</nav>
+      <main class="wrap">${Views[ui.tab]()}</main>`;
+    Admin.renderedAt = Date.now();
+    tickLive();
+  }
+};
+
+// ---------- Views ----------
+const kpi = (k, v, cls = '') => html`<div class="kpi ${cls}"><div class="v">${v}</div><div class="k">${k}</div></div>`;
+const rateCell = v => v === '' || v == null ? html`<b>not set</b>` : money(num(v));
+function weekNav(){
+  const end = addDays(ui.weekStart, 6);
+  return html`<div class="row weeknav noprint">
+    <button class="sm" data-act="week" data-k="-1">◀ Prev</button>
+    <b>${fmtDay(ui.weekStart)} – ${fmtDay(end)} ${end.getFullYear()}</b>
+    <button class="sm" data-act="week" data-k="1">Next ▶</button>
+    <button class="sm" data-act="weekToday">This week</button>
+    <input type="date" style="width:auto" value="${ymd(ui.weekStart)}" data-change="weekPick" aria-label="Jump to week">
+  </div>`;
+}
+function breakRow(b){
+  return html`<div class="grid dyn">
+    <div><label>Break start</label><input type="datetime-local" name="bs" value="${toLocalInput(b?.start)}"></div>
+    <div><label>Break end</label><input type="datetime-local" name="be" value="${toLocalInput(b?.end)}"></div>
+    <button type="button" class="sm" data-act="removeRow" aria-label="Remove break">✕</button></div>`;
+}
+function ruleRow(r){
+  return html`<div class="grid dyn" style="max-width:520px">
+    <div><label>Shift ≥ hours</label><input type="number" step="0.25" min="0" name="rh" value="${r.h}"></div>
+    <div><label>Break minutes</label><input type="number" step="1" min="0" name="rm" value="${r.m}"></div>
+    <button type="button" class="sm" data-act="removeRow" aria-label="Remove rule">✕</button></div>`;
+}
+const SORTS = { name: r => r.e.name.toLowerCase(), total: r => r.total, paid: r => r.paid, gross: r => r.gross, net: r => r.net };
+function sortRows(rows){
+  const f = SORTS[ui.sort.k] || SORTS.name, d = ui.sort.dir;
+  return rows.sort((a, b) => { const x = f(a), y = f(b); return (x < y ? -1 : x > y ? 1 : 0) * d; });
+}
+
+const Views = {
+  dashboard(){
+    const now = Date.now(), s = db(), ws = startOfWeek(now), tier = num(s.settings.tierHours);
+    const rows = Pay.week(ws, now), T = Pay.totals(rows), alerts = Pay.anomalies(ws, now);
+    const open = s.shifts.filter(x => x.out == null).sort((a, b) => a.in - b.in), onBreak = open.filter(openBreak).length;
+    return html`
+      <div class="kpis">
+        ${kpi('On shift now', open.length - onBreak)}${kpi('On break now', onBreak)}
+        ${kpi('Paid hours · week', fmtHM(T.paid))}${kpi('Net payroll · week', money(T.net))}
+        ${kpi('Active staff', s.employees.filter(e => e.active !== false).length)}${kpi('Alerts', alerts.length, alerts.length ? 'alert' : '')}
+      </div>
+      <div class="cols">
+        <div class="section"><h3>On the clock now (${open.length})</h3>
+          ${open.length ? html`<div class="tablewrap" style="box-shadow:none"><table>
+            <thead><tr><th class="l">Employee</th><th>In</th><th>Elapsed</th><th class="l">Status</th><th>Break</th><th></th></tr></thead>
+            <tbody>${open.map(sh => { const b = openBreak(sh), c = Pay.shift(sh, s.settings, now); return html`<tr>
+              <td class="l">${empName(sh.empId)}</td>
+              <td>${fmtTime(sh.in)}${ymd(sh.in) !== ymd(now) ? html` <small>${fmtDay(sh.in)}</small>` : ''}</td>
+              <td data-elapsed="${sh.in}"></td>
+              <td class="l">${b ? html`<span class="tag">ON BREAK</span>` : html`<span class="tag b">WORKING</span>`}</td>
+              <td>${fmtMin(c.actual)}</td>
+              <td><button class="sm" data-act="forceOut" data-id="${sh.id}">Clock out</button></td></tr>`; })}</tbody>
+          </table></div>` : html`<span class="muted">Nobody is clocked in.</span>`}
+        </div>
+        <div class="section"><h3>Alerts (${alerts.length})</h3>
+          ${alerts.length ? html`<ul class="alerts">${alerts.map(a => html`<li class="lvl-${a.level}"><span>${a.msg}</span>
+            ${a.shiftId ? html`<button class="sm" data-act="editShift" data-id="${a.shiftId}">Fix</button>`
+              : a.empId ? html`<button class="sm" data-act="editEmp" data-id="${a.empId}">Fix</button>`
+              : a.tab ? html`<button class="sm" data-act="tab" data-k="${a.tab}">Open</button>` : ''}</li>`)}</ul>`
+          : html`<span class="muted">All clear.</span>`}
+        </div>
+      </div>
+      <div class="cols">
+        <div class="section"><h3>Paid hours by day · this week</h3>${barChart(DAYS.map((d, i) => ({ label: d, value: T.days[i] })))}</div>
+        <div class="section"><h3>Paid hours by employee · dashed line = ${tier}h tier</h3>
+          ${rows.some(r => r.paid > 0) ? barChart(rows.filter(r => r.paid > 0).map(r => ({ label: r.e.name, value: r.paid })), { ref: tier || null })
+            : html`<span class="muted">No hours recorded this week yet.</span>`}</div>
+      </div>`;
+  },
+
+  report(){
+    const tier = num(db().settings.tierHours), rows = sortRows(Pay.week(ui.weekStart)), T = Pay.totals(rows), end = addDays(ui.weekStart, 6);
+    const th = (k, label, cls = '') => html`<th class="${cls}" aria-sort="${ui.sort.k === k ? (ui.sort.dir > 0 ? 'ascending' : 'descending') : 'none'}">
+      <button class="thbtn" data-act="sort" data-k="${k}">${label}${ui.sort.k === k ? (ui.sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`;
+    return html`${weekNav()}
+      <h2 class="title">Weekly hours & pay · ${fmtDay(ui.weekStart)} – ${fmtDay(end)} ${end.getFullYear()}</h2>
+      <p class="muted" style="margin:0 0 14px">Paid hours = worked hours − break deducted. Rate 1 applies to the first ${tier} paid hours of the week, Rate 2 after that. Click a column heading to sort.</p>
+      <div class="tablewrap"><table>
+        <thead><tr>${th('name', 'Employee', 'l')}${DAYS.map(d => html`<th>${d}</th>`)}${th('total', 'Worked')}<th>Break</th>${th('paid', 'Paid hrs')}
+          <th>First ${tier}h</th><th>After ${tier}h</th>${th('gross', 'Gross')}<th>+ Allow.</th><th>− Deduct.</th>${th('net', 'Net pay')}<th class="noprint"></th></tr></thead>
+        <tbody>
+        ${rows.length ? rows.map(r => html`<tr>
+          <td class="l"><a href="#" class="lnk" style="color:inherit;font-weight:700" data-act="showShifts" data-id="${r.e.id}">${r.e.name}</a>${r.open ? html` <span class="tag b">ON</span>` : ''}</td>
+          ${r.days.map(d => html`<td>${d ? fmtHM(d) : html`<span class="muted">–</span>`}</td>`)}
+          <td>${fmtHM(r.total)}</td><td>${fmtMin(r.ded)}</td><td><b>${fmtHM(r.paid)}</b><br><small>${r.paid.toFixed(2)}h</small></td>
+          <td>${r.h1.toFixed(2)}h × ${r.r1 ? money(r.r1) : html`<b>?</b>`}<br><small>${money(r.p1)}</small></td>
+          <td>${r.h2.toFixed(2)}h × ${r.r2 ? money(r.r2) : html`<b>?</b>`}<br><small>${money(r.p2)}</small></td>
+          <td>${money(r.gross)}</td><td>${money(r.allow)}</td><td>${money(r.deduct)}</td><td class="net">${money(r.net)}</td>
+          <td class="noprint"><button class="sm" data-act="adjust" data-id="${r.e.id}">± Adjust</button></td></tr>`)
+          : html`<tr><td class="l" colspan="19"><span class="muted">No employees yet.</span></td></tr>`}
+        ${rows.length ? html`<tr class="tot"><td class="l">TOTAL</td>${T.days.map(d => html`<td>${fmtHM(d)}</td>`)}
+          <td>${fmtHM(T.total)}</td><td>${fmtMin(T.ded)}</td><td>${fmtHM(T.paid)}</td><td>${T.h1.toFixed(2)}h<br><small>${money(T.p1)}</small></td>
+          <td>${T.h2.toFixed(2)}h<br><small>${money(T.p2)}</small></td><td>${money(T.gross)}</td><td>${money(T.allow)}</td><td>${money(T.deduct)}</td><td>${money(T.net)}</td><td class="noprint"></td></tr>` : ''}
+        </tbody>
+      </table></div>
+      <div class="row noprint"><button data-act="print">Print</button><button data-act="exportReport">Export payroll CSV</button><button data-act="exportShifts">Export shifts CSV</button></div>`;
+  },
+
+  shifts(){
+    const s = db(), a = +ui.weekStart, b = +addDays(ui.weekStart, 7), now = Date.now();
+    const list = s.shifts.filter(x => x.in >= a && x.in < b && (!ui.shiftFilter || x.empId === ui.shiftFilter)).sort((x, y) => x.in - y.in);
+    return html`${weekNav()}
+      <div class="row">
+        <select style="width:auto" data-change="shiftFilter" aria-label="Filter by employee">
+          <option value="">All employees</option>
+          ${s.employees.map(e => html`<option value="${e.id}" ${ui.shiftFilter === e.id ? 'selected' : ''}>${e.name}</option>`)}
+        </select>
+        <button class="inv" data-act="addShift">+ Add shift</button>
+      </div>
+      <div class="section"><h3>Timeline</h3>
+        <div class="scrollx">${timeline(ui.weekStart, ui.shiftFilter)}</div>
+        <small>Solid = completed · outlined = still on the clock · hatched = break · red line = now. Click a shift to edit it.</small>
+      </div>
+      <div class="tablewrap"><table>
+        <thead><tr><th class="l">Employee</th><th class="l">Date</th><th>In</th><th>Out</th><th class="l">Breaks taken</th>
+          <th>Worked</th><th>Break taken</th><th>Break by rule</th><th>Deducted</th><th>Paid</th><th></th></tr></thead>
+        <tbody>
+        ${list.length ? list.map(sh => { const c = Pay.shift(sh, s.settings, now); return html`<tr>
+          <td class="l">${empName(sh.empId)}</td><td class="l">${fmtDay(sh.in)}</td><td>${fmtTime(sh.in)}</td>
+          <td>${sh.out ? html`${fmtTime(sh.out)}${ymd(sh.out) !== ymd(sh.in) ? html` <small>+1d</small>` : ''}` : html`<span class="tag b">ON CLOCK</span>`}</td>
+          <td class="l">${sh.breaks.length ? sh.breaks.map((bk, i) => html`${i ? html`<br>` : ''}${fmtTime(bk.start)}–${bk.end ? fmtTime(bk.end) : '…'}`) : html`<span class="muted">none</span>`}</td>
+          <td>${fmtHM(c.total)}</td><td>${fmtMin(c.actual)}</td><td>${fmtMin(c.policy)}</td><td>${fmtMin(c.ded)}</td><td><b>${fmtHM(c.paid)}</b></td>
+          <td><button class="sm" data-act="editShift" data-id="${sh.id}">Edit</button> <button class="sm" data-act="delShift" data-id="${sh.id}" aria-label="Delete shift">✕</button></td></tr>`; })
+        : html`<tr><td class="l" colspan="11"><span class="muted">No shifts this week.</span></td></tr>`}
+        </tbody>
+      </table></div>`;
+  },
+
+  employees(){
+    const st = db().settings, tier = num(st.tierHours);
+    return html`<form class="section" data-submit="empAdd"><h3>Add employee</h3>
+        <div class="grid">
+          <div><label for="eName">Name</label><input id="eName" name="name" required autocomplete="off"></div>
+          <div><label for="ePin">4-digit code</label><input id="ePin" name="pin" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" required autocomplete="off"></div>
+          <div><label for="eR1">Rate first ${tier}h (${st.currency}/h)</label><input id="eR1" name="rate1" type="number" step="0.01" min="0"></div>
+          <div><label for="eR2">Rate after ${tier}h (${st.currency}/h)</label><input id="eR2" name="rate2" type="number" step="0.01" min="0"></div>
+        </div>
+        <div class="row tight"><button class="inv" type="submit">Add employee</button><button type="button" class="sm" data-act="suggestPin">Suggest a free code</button></div>
+      </form>
+      <div class="row">
+        <input type="search" placeholder="Search employees…" value="${ui.empQuery}" data-input="empSearch" style="max-width:320px" aria-label="Search employees">
+        <button class="sm" data-act="togglePins">${ui.showPins ? 'Hide' : 'Show'} codes</button>
+      </div>
+      <div class="tablewrap"><table>
+        <thead><tr><th class="l">Name</th><th>Code</th><th>Rate first ${tier}h</th><th>Rate after ${tier}h</th><th>Paid this week</th><th class="l">Status</th><th></th></tr></thead>
+        <tbody id="empRows">${Views.empRows()}</tbody>
+      </table></div>`;
+  },
+  empRows(){
+    const q = ui.empQuery.trim().toLowerCase();
+    const week = new Map(Pay.week(startOfWeek(new Date())).map(r => [r.e.id, r.paid]));
+    const list = db().employees.filter(e => !q || e.name.toLowerCase().includes(q))
+      .sort((a, b) => (a.active === false) - (b.active === false) || a.name.localeCompare(b.name));
+    if(!list.length) return html`<tr><td class="l" colspan="7"><span class="muted">${q ? 'No matches.' : 'No employees yet.'}</span></td></tr>`;
+    return html`${list.map(e => html`<tr>
+      <td class="l">${e.name}</td><td>${ui.showPins ? e.pin : '••••'}</td><td>${rateCell(e.rate1)}</td><td>${rateCell(e.rate2)}</td>
+      <td>${fmtHM(week.get(e.id) ?? 0)}</td>
+      <td class="l">${e.active === false ? html`<span class="tag">INACTIVE</span>` : html`<span class="tag b">ACTIVE</span>`}</td>
+      <td><button class="sm" data-act="editEmp" data-id="${e.id}">Edit</button> <button class="sm" data-act="showShifts" data-id="${e.id}">Shifts</button></td></tr>`)}`;
+  },
+
+  audit(){
+    return html`<div class="row">
+        <input type="search" placeholder="Search log…" value="${ui.auditQuery}" data-input="auditSearch" style="max-width:320px" aria-label="Search audit log">
+        <button class="sm" data-act="exportAudit">Export CSV</button>
+      </div>
+      <p class="muted" style="margin-top:0">Every punch and admin change is recorded here (latest ${Store.MAX_AUDIT} kept, 300 shown).</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th class="l">When</th><th class="l">Who</th><th class="l">Action</th><th class="l">Detail</th></tr></thead>
+        <tbody id="auditRows">${Views.auditRows()}</tbody>
+      </table></div>`;
+  },
+  auditRows(){
+    const q = ui.auditQuery.trim().toLowerCase();
+    const list = db().audit.filter(a => !q || `${a.actor} ${a.action} ${a.detail}`.toLowerCase().includes(q)).slice(0, 300);
+    if(!list.length) return html`<tr><td class="l" colspan="4"><span class="muted">${q ? 'No matches.' : 'Nothing logged yet.'}</span></td></tr>`;
+    return html`${list.map(a => html`<tr><td class="l">${fmtStamp(a.ts)}</td><td class="l">${a.actor}</td><td class="l"><b>${a.action}</b></td><td class="l wrap-text">${a.detail}</td></tr>`)}`;
+  },
+
+  settings(){
+    const st = db().settings;
+    const opt = (v, cur, label) => html`<option value="${v}" ${cur === v ? 'selected' : ''}>${label}</option>`;
+    return html`<form data-submit="settingsSave">
+        <div class="section"><h3>General</h3><div class="grid">
+          <div><label for="sComp">Business name</label><input id="sComp" name="company" value="${st.company}"></div>
+          <div><label for="sCur">Currency symbol</label><input id="sCur" name="currency" value="${st.currency}" maxlength="4"></div>
+          <div><label for="sTier">Rate 1 covers first … hours/week</label><input id="sTier" name="tierHours" type="number" step="0.5" min="0" value="${st.tierHours}"></div>
+          <div><label for="sTheme">Theme</label><select id="sTheme" name="theme">${opt('auto', st.theme, 'Follow device')}${opt('light', st.theme, 'Light')}${opt('dark', st.theme, 'Dark')}</select></div>
+        </div></div>
+        <div class="section"><h3>Break rules</h3>
+          <p class="muted" style="margin-top:0">If a shift is at least this many hours long, this much break is deducted. The highest matching rule applies.</p>
+          <div id="rules">${st.breakRules.map(ruleRow)}</div>
+          <div class="row"><button type="button" class="sm" data-act="addRule">+ Add rule</button></div>
+          <label for="sMode">How to deduct the break</label>
+          <select id="sMode" name="breakMode" style="max-width:520px">
+            ${opt('greater', st.breakMode, 'Whichever is MORE: break by rule or actual break taken')}
+            ${opt('policy', st.breakMode, 'Always the break by rule')}
+            ${opt('actual', st.breakMode, 'Only the actual break taken (clocked)')}
+          </select>
+        </div>
+        <div class="section"><h3>Kiosk & safety</h3><div class="grid">
+          <div><label for="sIdle">Kiosk auto-cancel (seconds)</label><input id="sIdle" name="kioskIdleSec" type="number" min="5" step="1" value="${st.kioskIdleSec}"></div>
+          <div><label for="sAdm">Admin auto-lock (minutes)</label><input id="sAdm" name="adminTimeoutMin" type="number" min="1" step="1" value="${st.adminTimeoutMin}"></div>
+          <div><label for="sMax">Flag open shifts longer than (hours)</label><input id="sMax" name="maxShiftHours" type="number" min="1" step="0.5" value="${st.maxShiftHours}"></div>
+        </div></div>
+        <div class="row"><button class="inv" type="submit">Save settings</button></div>
+      </form>
+      <form class="section" data-submit="pinChange" style="margin-top:22px"><h3>Change admin PIN</h3>
+        <div class="grid">
+          <div><label for="pCur">Current PIN</label><input id="pCur" name="current" type="password" autocomplete="off" required></div>
+          <div><label for="pNew">New PIN (4+ characters)</label><input id="pNew" name="next" type="password" autocomplete="off" minlength="4" required></div>
+          <div><label for="pRep">Repeat new PIN</label><input id="pRep" name="repeat" type="password" autocomplete="off" minlength="4" required></div>
+        </div>
+        <button class="inv" type="submit">Update PIN</button>
+      </form>
+      <div class="section"><h3>Backup</h3>
+        <p class="muted" style="margin-top:0">All data is stored in this browser on this device. Download a backup regularly.</p>
+        <div class="row tight"><button data-act="backup">Download backup</button>
+          <label class="btn" style="margin:0">Restore from backup<input type="file" accept=".json,application/json" class="sr" data-change="importFile"></label>
+          <button data-act="erase">Erase all data</button></div>
+      </div>`;
+  }
+};
+
+// ---------- Dialogs ----------
+const Dialogs = {
+  adjust(empId){
+    const e = empById(empId); if(!e) return;
+    const list = db().adj[`${ymd(ui.weekStart)}|${empId}`] || [];
+    Modal.open(html`<h2 id="modalTitle">Allowances & deductions</h2>
+      <p style="margin-top:0"><b>${e.name}</b> · week of ${fmtDay(ui.weekStart)}</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th class="l">Type</th><th class="l">Description</th><th>Amount</th><th></th></tr></thead>
+        <tbody>${list.length ? list.map((x, i) => html`<tr><td class="l">${x.type === 'allowance' ? '+ Allowance' : '− Deduction'}</td><td class="l">${x.label}</td><td>${money(num(x.amount))}</td>
+          <td><button class="sm" data-act="delAdj" data-id="${empId}" data-i="${i}" aria-label="Remove">✕</button></td></tr>`)
+          : html`<tr><td class="l" colspan="4"><span class="muted">None this week.</span></td></tr>`}</tbody>
+      </table></div>
+      <form data-submit="adjAdd" data-id="${empId}">
+        <div class="grid">
+          <div><label for="aType">Type</label><select id="aType" name="type"><option value="allowance">+ Allowance</option><option value="deduction">− Deduction</option></select></div>
+          <div><label for="aLabel">Description</label><input id="aLabel" name="label" placeholder="e.g. Travel, Uniform, Advance"></div>
+          <div><label for="aAmt">Amount</label><input id="aAmt" name="amount" type="number" step="0.01" min="0.01" required></div>
+        </div>
+        <div class="row"><button class="inv" type="submit">Add</button><button type="button" data-act="modalCancel">Done</button></div>
+      </form>`);
+  },
+  shift(id){
+    const s = db();
+    if(!s.employees.length) return Toast.show('Add an employee first', {ms:2000});
+    const sh = id ? s.shifts.find(x => x.id === id) : null;
+    if(id && !sh) return;
+    const sel = sh ? sh.empId : ui.shiftFilter, c = sh ? Pay.shift(sh) : null;
+    Modal.open(html`<form data-submit="shiftSave" data-id="${id || ''}">
+      <h2 id="modalTitle">${sh ? 'Edit' : 'Add'} shift</h2>
+      <div class="grid one"><div><label for="fEmp">Employee</label><select id="fEmp" name="empId">
+        ${s.employees.map(e => html`<option value="${e.id}" ${sel === e.id ? 'selected' : ''}>${e.name}${e.active === false ? ' (inactive)' : ''}</option>`)}</select></div></div>
+      <div class="grid two">
+        <div><label for="fIn">Clock in</label><input type="datetime-local" id="fIn" name="in" value="${toLocalInput(sh ? sh.in : +ui.weekStart + 9 * H)}" required></div>
+        <div><label for="fOut">Clock out <small>(blank = still on)</small></label><input type="datetime-local" id="fOut" name="out" value="${toLocalInput(sh?.out)}"></div>
+      </div>
+      <div id="brows">${(sh?.breaks || []).map(b => breakRow(b))}</div>
+      <div class="row"><button type="button" class="sm" data-act="addBreakRow">+ Add break</button></div>
+      ${c ? html`<p class="muted">Currently: worked ${fmtHM(c.total)} − deducted ${fmtMin(c.ded)} = paid <b>${fmtHM(c.paid)}</b></p>` : ''}
+      <div class="row"><button class="inv" type="submit">Save</button><button type="button" data-act="modalCancel">Cancel</button>
+        ${sh ? html`<button type="button" data-act="delShift" data-id="${sh.id}">Delete</button>` : ''}</div>
+    </form>`);
+  },
+  emp(id){
+    const e = empById(id); if(!e) return;
+    const tier = num(db().settings.tierHours), has = db().shifts.some(s => s.empId === id);
+    Modal.open(html`<form data-submit="empSave" data-id="${id}"><h2 id="modalTitle">Edit employee</h2>
+      <div class="grid two">
+        <div><label for="mName">Name</label><input id="mName" name="name" value="${e.name}" required></div>
+        <div><label for="mPin">4-digit code</label><input id="mPin" name="pin" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" value="${e.pin}" required></div>
+        <div><label for="mR1">Rate first ${tier}h</label><input id="mR1" name="rate1" type="number" step="0.01" min="0" value="${e.rate1}"></div>
+        <div><label for="mR2">Rate after ${tier}h</label><input id="mR2" name="rate2" type="number" step="0.01" min="0" value="${e.rate2}"></div>
+        <div><label for="mAct">Status</label><select id="mAct" name="active"><option value="1">Active</option><option value="0" ${e.active === false ? 'selected' : ''}>Inactive (cannot clock in)</option></select></div>
+      </div>
+      <div class="row"><button class="inv" type="submit">Save</button><button type="button" data-act="modalCancel">Cancel</button>
+        ${has ? '' : html`<button type="button" data-act="delEmp" data-id="${id}">Delete</button>`}</div>
+      ${has ? html`<small>This employee has shift history, so set them Inactive instead of deleting.</small>` : ''}
+    </form>`);
+  }
+};
+
+function validPin(p, exceptId){
+  if(!/^\d{4}$/.test(p)) return 'Code must be exactly 4 digits';
+  if(db().employees.some(e => e.pin === p && e.id !== exceptId)) return 'That code is already used by another employee';
+  return '';
+}
+async function ensureAdminPin(){
+  const st = db().settings;
+  if(st.adminPin == null && st.adminPinHash && st.adminSalt) return;
+  const pin = st.adminPin != null ? String(st.adminPin) : '0000';
+  const salt = Hash.salt(), hash = await Hash.make(pin, salt);
+  Store.commit('Admin PIN secured', s => {
+    Object.assign(s.settings, { adminSalt: salt, adminPinHash: hash, defaultPin: pin === '0000' });
+    delete s.settings.adminPin;
+  }, { actor: 'System', undoable: false });
+}
+
+// ---------- Event handlers ----------
+const Actions = {
+  press: d => Kiosk.press(d.k),
+  punch: d => Kiosk.punch(d.k),
+  kioskCancel: () => Kiosk.reset(true),
+  openAdmin: () => Admin.loginModal(),
+  modalCancel: () => Modal.close(false),
+  logout: () => Admin.logout(),
+  print: () => window.print(),
+  tab: d => { Modal.close(false); ui.tab = d.k; Admin.render(); },
+  week: d => { ui.weekStart = addDays(ui.weekStart, 7 * +d.k); Admin.render(); },
+  weekToday: () => { ui.weekStart = startOfWeek(new Date()); Admin.render(); },
+  sort: d => { ui.sort = { k: d.k, dir: ui.sort.k === d.k ? -ui.sort.dir : (d.k === 'name' ? 1 : -1) }; Admin.render(); },
+  showShifts: (d, el, ev) => { ev.preventDefault(); ui.shiftFilter = d.id; ui.tab = 'shifts'; Admin.render(); },
+  togglePins: () => { ui.showPins = !ui.showPins; $('#empRows').innerHTML = Views.empRows(); },
+  undo: () => { const label = Store.undo(); Toast.show(label ? `Undone: ${label}` : 'Nothing to undo', {ms:2500}); },
+  themeCycle: () => {
+    const order = ['auto', 'light', 'dark'], next = order[(order.indexOf(db().settings.theme) + 1) % 3];
+    Store.commit('Theme', s => { s.settings.theme = next; return next; }, { undoable: false });
+  },
+  adjust: d => Dialogs.adjust(d.id),
+  delAdj: d => {
+    const key = `${ymd(ui.weekStart)}|${d.id}`;
+    Store.commit('Remove adjustment', s => {
+      const list = s.adj[key]; if(!list?.[+d.i]) return false;
+      const [x] = list.splice(+d.i, 1); if(!list.length) delete s.adj[key];
+      return `${empName(d.id)}: ${x.type} "${x.label}" ${money(num(x.amount))}`;
+    });
+    Dialogs.adjust(d.id);
+  },
+  addShift: () => Dialogs.shift(),
+  editShift: d => Dialogs.shift(d.id),
+  delShift: async d => {
+    const sh = db().shifts.find(x => x.id === d.id); if(!sh) return;
+    const detail = `${empName(sh.empId)} · ${fmtDay(sh.in)} ${fmtTime(sh.in)}`;
+    if(!await Modal.confirm(`Delete the shift for ${detail}?`, { title: 'Delete shift', ok: 'Delete' })) return;
+    Store.commit('Delete shift', s => { s.shifts = s.shifts.filter(x => x.id !== d.id); return detail; });
+    Toast.show('Shift deleted', { action: { label: 'Undo', act: 'undo' } });
+  },
+  forceOut: async d => {
+    const sh = db().shifts.find(x => x.id === d.id); if(!sh) return;
+    const name = empName(sh.empId);
+    if(!await Modal.confirm(`Clock ${name} out now? Any open break will be ended.`, { title: 'Force clock-out', ok: 'Clock out' })) return;
+    const now = Date.now();
+    Store.commit('Force clock-out', s => {
+      const x = s.shifts.find(y => y.id === d.id); if(!x || x.out != null) return false;
+      const b = x.breaks.find(y => y.end == null); if(b) b.end = now;
+      x.out = now; return `${name} at ${fmtTime(now)}`;
+    });
+    Toast.show(`${name} clocked out`, { action: { label: 'Undo', act: 'undo' } });
+  },
+  addBreakRow: () => $('#brows').insertAdjacentHTML('beforeend', breakRow()),
+  addRule: () => $('#rules').insertAdjacentHTML('beforeend', ruleRow({ h: '', m: '' })),
+  removeRow: (d, el) => el.closest('.dyn').remove(),
+  editEmp: d => Dialogs.emp(d.id),
+  delEmp: async d => {
+    const name = empName(d.id);
+    if(!await Modal.confirm(`Delete ${name}? This cannot be undone once you leave admin.`, { title: 'Delete employee', ok: 'Delete' })) return;
+    Store.commit('Delete employee', s => { s.employees = s.employees.filter(e => e.id !== d.id); return name; });
+    Toast.show(`${name} deleted`, { action: { label: 'Undo', act: 'undo' } });
+  },
+  suggestPin: () => {
+    const used = new Set(db().employees.map(e => e.pin));
+    if(used.size >= 10000) return Toast.show('No free codes left');
+    let p; do p = String(Math.floor(Math.random() * 10000)).padStart(4, '0'); while(used.has(p));
+    $('#ePin').value = p;
+  },
+  exportReport: () => {
+    const rows = Pay.week(ui.weekStart), tier = num(db().settings.tierHours);
+    const out = [['Employee', ...DAYS.map(d => d + ' paid hrs'), 'Worked hrs', 'Break deducted hrs', 'Paid hrs',
+      `Hrs first ${tier}`, 'Rate 1', `Hrs after ${tier}`, 'Rate 2', 'Gross', 'Allowances', 'Deductions', 'Net pay']];
+    for(const r of rows) out.push([r.e.name, ...r.days.map(d => d.toFixed(2)), r.total.toFixed(2), (r.ded / 60).toFixed(2), r.paid.toFixed(2),
+      r.h1.toFixed(2), r.r1.toFixed(2), r.h2.toFixed(2), r.r2.toFixed(2), r.gross.toFixed(2), r.allow.toFixed(2), r.deduct.toFixed(2), r.net.toFixed(2)]);
+    download(`payroll_${ymd(ui.weekStart)}.csv`, CSV.build(out), 'text/csv');
+  },
+  exportShifts: () => {
+    const a = +ui.weekStart, b = +addDays(ui.weekStart, 7), st = db().settings;
+    const out = [['Employee', 'Date', 'In', 'Out', 'Worked hrs', 'Break taken min', 'Break by rule min', 'Deducted min', 'Paid hrs']];
+    for(const sh of db().shifts.filter(x => x.in >= a && x.in < b).sort((x, y) => x.in - y.in)){
+      const c = Pay.shift(sh, st);
+      out.push([empName(sh.empId), ymd(sh.in), fmtTime(sh.in), sh.out ? fmtTime(sh.out) : 'OPEN', c.total.toFixed(2), c.actual, c.policy, c.ded, c.paid.toFixed(2)]);
+    }
+    download(`shifts_${ymd(ui.weekStart)}.csv`, CSV.build(out), 'text/csv');
+  },
+  exportAudit: () => {
+    const out = [['Timestamp', 'Who', 'Action', 'Detail'], ...db().audit.map(a => [new Date(a.ts).toISOString(), a.actor, a.action, a.detail])];
+    download(`audit_${ymd(new Date())}.csv`, CSV.build(out), 'text/csv');
+  },
+  backup: () => { download(`timeclock_backup_${ymd(new Date())}.json`, JSON.stringify(db(), null, 1), 'application/json'); Store.log('Admin', 'Backup downloaded'); },
+  erase: async () => {
+    if(!await Modal.confirm('Erase ALL employees, shifts, adjustments and settings? This cannot be undone.', { title: 'Erase all data', ok: 'Erase everything', typed: 'ERASE' })) return;
+    Store.replace(Store.defaults(), 'Erase all data');
+    await ensureAdminPin();
+    Toast.show('All data erased. Admin PIN reset to 0000.', {ms:5000});
+  }
+};
+
+const Changes = {
+  weekPick: el => { if(el.value){ ui.weekStart = startOfWeek(new Date(el.value + 'T00:00')); Admin.render(); } },
+  shiftFilter: el => { ui.shiftFilter = el.value; Admin.render(); },
+  importFile: el => {
+    const file = el.files[0]; if(!file) return;
+    const fr = new FileReader();
+    fr.onload = async () => {
+      let d;
+      try{ d = JSON.parse(fr.result); }catch(e){ d = null; }
+      if(!Store.valid(d)) return Toast.show('That file is not a valid backup', {ms:2500});
+      if(!await Modal.confirm(`Replace ALL current data with this backup (${d.employees.length} employees, ${d.shifts.length} shifts)? The admin PIN will become the one stored in the backup.`, { title: 'Restore backup', ok: 'Restore' })) return;
+      Store.replace(d, 'Backup restored');
+      await ensureAdminPin();
+      Toast.show('Backup restored', {ms:2000});
+    };
+    fr.readAsText(file);
+  }
+};
+
+const Inputs = {
+  empSearch: el => { ui.empQuery = el.value; $('#empRows').innerHTML = Views.empRows(); },
+  auditSearch: el => { ui.auditQuery = el.value; $('#auditRows').innerHTML = Views.auditRows(); }
+};
+
+const Forms = {
+  confirmOk: fd => {
+    if(Modal.typed && fd.get('typed') !== Modal.typed) return Toast.show(`Type ${Modal.typed} exactly to confirm`, {ms:2200});
+    Modal.close(true);
+  },
+  adminLogin: async fd => {
+    const now = Date.now(), msg = $('#loginMsg');
+    if(now < Admin.lockUntil) return;
+    const st = db().settings;
+    if(!await Hash.verify(String(fd.get('pin') ?? ''), st.adminSalt, st.adminPinHash)){
+      if(++Admin.fails >= 5){
+        Admin.lockUntil = now + 60000; Admin.fails = 0;
+        Store.log('System', 'Admin locked out', '5 wrong admin PINs');
+        msg.innerHTML = html`Locked — try again in <span data-countdown="${Admin.lockUntil}"></span>s`;
+      } else msg.textContent = `Wrong PIN (${5 - Admin.fails} tries left)`;
+      const i = $('#apin'); i.value = ''; i.classList.remove('shake'); void i.offsetWidth; i.classList.add('shake'); i.focus();
+      return;
+    }
+    Admin.fails = 0; Admin.lastActive = now; Kiosk.reset(false);
+    Object.assign(ui, { view: 'admin', tab: 'dashboard', weekStart: startOfWeek(new Date()) });
+    Modal.close(true); Store.log('Admin', 'Admin login'); applyTheme(); Admin.render();
+  },
+  adjAdd: (fd, form) => {
+    const empId = form.dataset.id, amount = num(fd.get('amount'));
+    if(amount <= 0) return Toast.show('Enter an amount', {ms:1800});
+    const key = `${ymd(ui.weekStart)}|${empId}`, item = { type: fd.get('type'), label: String(fd.get('label')).trim() || '—', amount };
+    Store.commit('Add adjustment', s => { (s.adj[key] ||= []).push(item); return `${empName(empId)}: ${item.type} "${item.label}" ${money(amount)}`; });
+    Dialogs.adjust(empId);
+  },
+  shiftSave: (fd, form) => {
+    const id = form.dataset.id || null, empId = fd.get('empId');
+    const tin = fromLocalInput(fd.get('in')), tout = fromLocalInput(fd.get('out'));
+    if(!tin) return Toast.show('Clock-in time is required', {ms:2000});
+    if(tout && tout <= tin) return Toast.show('Clock-out must be after clock-in', {ms:2000});
+    const bs = fd.getAll('bs'), be = fd.getAll('be'), breaks = [];
+    for(let i = 0; i < bs.length; i++){
+      const start = fromLocalInput(bs[i]), end = fromLocalInput(be[i]);
+      if(!start) continue;
+      if(end && end <= start) return Toast.show('A break ends before it starts', {ms:2000});
+      if(start < tin || (tout && (start >= tout || (end && end > tout)))) return Toast.show('Breaks must be inside the shift', {ms:2000});
+      breaks.push({ start, end: end || tout || null });
+    }
+    breaks.sort((a, b) => a.start - b.start);
+    for(let i = 1; i < breaks.length; i++)
+      if((breaks[i - 1].end ?? Infinity) > breaks[i].start) return Toast.show('Breaks overlap each other', {ms:2000});
+    const clash = db().shifts.find(x => x.id !== id && x.empId === empId && x.in < (tout ?? Infinity) && (x.out ?? Infinity) > tin);
+    if(clash) return Toast.show(`Overlaps another shift for this employee (${fmtDay(clash.in)} ${fmtTime(clash.in)})`, {ms:4000});
+    const detail = `${empName(empId)} · ${fmtDay(tin)} ${fmtTime(tin)}–${tout ? fmtTime(tout) : 'open'}`;
+    Store.commit(id ? 'Edit shift' : 'Add shift', s => {
+      if(id){ const x = s.shifts.find(y => y.id === id); if(!x) return false; Object.assign(x, { empId, in: tin, out: tout, breaks }); }
+      else s.shifts.push({ id: uid(), empId, in: tin, out: tout, breaks });
+      return detail;
+    });
+    Modal.close(true);
+    Toast.show('Shift saved', { action: { label: 'Undo', act: 'undo' } });
+  },
+  empAdd: fd => {
+    const name = String(fd.get('name')).trim(), p = String(fd.get('pin')).trim();
+    if(!name) return Toast.show('Enter a name', {ms:1800});
+    const err = validPin(p); if(err) return Toast.show(err, {ms:2200});
+    Store.commit('Add employee', s => { s.employees.push({ id: uid(), name, pin: p, rate1: fd.get('rate1'), rate2: fd.get('rate2'), active: true }); return name; });
+    Toast.show(`${name} added`, {ms:1500});
+    $('#eName')?.focus();
+  },
+  empSave: (fd, form) => {
+    const id = form.dataset.id, name = String(fd.get('name')).trim(), p = String(fd.get('pin')).trim();
+    if(!name) return Toast.show('Enter a name', {ms:1800});
+    const err = validPin(p, id); if(err) return Toast.show(err, {ms:2200});
+    Store.commit('Edit employee', s => {
+      const e = s.employees.find(x => x.id === id); if(!e) return false;
+      Object.assign(e, { name, pin: p, rate1: fd.get('rate1'), rate2: fd.get('rate2'), active: fd.get('active') === '1' });
+      return name;
+    });
+    Modal.close(true);
+  },
+  settingsSave: fd => {
+    const rm = fd.getAll('rm');
+    const rules = fd.getAll('rh').map((h, i) => ({ h: num(h), m: num(rm[i]) })).filter(r => r.h > 0).sort((a, b) => a.h - b.h);
+    Store.commit('Update settings', s => {
+      Object.assign(s.settings, {
+        company: String(fd.get('company')).trim() || 'Time Clock',
+        currency: String(fd.get('currency')),
+        tierHours: Math.max(0, num(fd.get('tierHours'))),
+        theme: fd.get('theme'), breakMode: fd.get('breakMode'), breakRules: rules,
+        kioskIdleSec: Math.max(5, num(fd.get('kioskIdleSec'))),
+        adminTimeoutMin: Math.max(1, num(fd.get('adminTimeoutMin'))),
+        maxShiftHours: Math.max(1, num(fd.get('maxShiftHours')))
+      });
+    });
+    Toast.show('Settings saved', { ms: 1500, action: { label: 'Undo', act: 'undo' } });
+  },
+  pinChange: async (fd, form) => {
+    const st = db().settings, next = String(fd.get('next'));
+    if(!await Hash.verify(String(fd.get('current')), st.adminSalt, st.adminPinHash)) return Toast.show('Current PIN is wrong', {ms:2200});
+    if(next.length < 4) return Toast.show('New PIN must be at least 4 characters', {ms:2200});
+    if(next !== fd.get('repeat')) return Toast.show('New PINs do not match', {ms:2200});
+    const salt = Hash.salt(), hash = await Hash.make(next, salt);
+    Store.commit('Admin PIN changed', s => { Object.assign(s.settings, { adminSalt: salt, adminPinHash: hash, defaultPin: false }); }, { undoable: false });
+    form.reset(); Toast.show('Admin PIN updated', {ms:2000});
+  }
+};
+
+function bindEvents(){
+  document.addEventListener('click', ev => {
+    const el = ev.target.closest('[data-act]');
+    if(!el || el.disabled) return;
+    Actions[el.dataset.act]?.(el.dataset, el, ev);
+  });
+  document.addEventListener('submit', ev => {
+    const fn = Forms[ev.target.dataset.submit]; if(!fn) return;
+    ev.preventDefault(); fn(new FormData(ev.target), ev.target);
+  });
+  document.addEventListener('change', ev => { const el = ev.target.closest('[data-change]'); if(el) Changes[el.dataset.change]?.(el); });
+  document.addEventListener('input', ev => { const el = ev.target.closest('[data-input]'); if(el) Inputs[el.dataset.input]?.(el); });
+  $('#modal').addEventListener('mousedown', ev => { if(ev.target === ev.currentTarget) Modal.close(false); });
+
+  document.addEventListener('keydown', ev => {
+    if(Modal.isOpen()) return Modal.onKey(ev);
+    if(ui.view !== 'kiosk' || ev.target.matches('input,select,textarea')) return;
+    if(/^[0-9]$/.test(ev.key)) Kiosk.press(ev.key);
+    else if(ev.key === 'Backspace') Kiosk.press('<');
+    else if(ev.key === 'Escape') Kiosk.current ? Kiosk.reset(true) : Kiosk.press('C');
+    else if(ev.key === 'Enter' && Kiosk.current && ev.target.tagName !== 'BUTTON'){ ev.preventDefault(); $('[data-primary]')?.click(); }
+  });
+  ['pointerdown', 'keydown'].forEach(t => document.addEventListener(t, () => { if(ui.view === 'admin') Admin.lastActive = Date.now(); }, true));
+
+  // Keep several open tabs/windows in sync.
+  window.addEventListener('storage', ev => { if(ev.key === Store.KEY) Store.syncFromDisk(); });
+  window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
+}
+
+async function boot(){
+  Store.load();
+  await ensureAdminPin();
+  Store.subscribe(render);
+  bindEvents();
+  render();
+  setInterval(() => {
+    const now = Date.now();
+    ui.view === 'kiosk' ? Kiosk.tick(now) : Admin.tick(now);
+    tickLive(now);
+  }, 1000);
+}
+boot();
+</script>
+</body>
+</html>

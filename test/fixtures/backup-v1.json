@@ -1,0 +1,35 @@
+{
+ "settings": {
+  "company": "Old Co",
+  "adminPin": "1234",
+  "currency": "$",
+  "tierHours": 24,
+  "breakMode": "greater",
+  "breakRules": [
+   {
+    "h": 4,
+    "m": 15
+   }
+  ]
+ },
+ "employees": [
+  {
+   "id": "e1",
+   "name": "Ann Lee",
+   "pin": "1111",
+   "rate1": "",
+   "rate2": "30",
+   "active": true
+  }
+ ],
+ "shifts": [
+  {
+   "id": "s1",
+   "empId": "e1",
+   "in": 1793052000000,
+   "out": 1793080800000,
+   "breaks": []
+  }
+ ],
+ "adj": {}
+}
