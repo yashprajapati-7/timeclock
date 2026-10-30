@@ -229,7 +229,7 @@ const Kiosk = {
     $('#dt').textContent = n.toLocaleDateString([], {weekday:'long', day:'numeric', month:'long', year:'numeric'});
     $('#onnow').textContent = !info ? 'Connecting…' : info.hasEmployees
       ? `ON SHIFT: ${info.onShift}  ·  ON BREAK: ${info.onBreak}`
-      : `No employees yet — tap ADMIN${info.defaultPin ? ' (default PIN 0000)' : ''} to add staff.`;
+      : 'No staff added yet';
     if(Kiosk.lockUntil && now >= Kiosk.lockUntil){ Kiosk.lockUntil = 0; if(!Kiosk.current) Kiosk.renderPad(); }
   },
   renderPad(){
@@ -353,11 +353,11 @@ const Admin = {
     if(!db()) return;
     const s = db(), undoLabel = RemoteStore.undoLabel, alerts = Pay.anomalies(s, startOfWeek(new Date())).length;
     app.innerHTML = html`
-      <header class="bar noprint"><div class="brand">${s.settings.company} · Admin</div>
+      <header class="bar noprint"><div class="brand">${s.settings.company}<span class="hide-sm"> · Admin</span></div>
         <div class="row tight">
-          ${undoLabel ? html`<button class="sm" data-act="undo" title="Undo: ${undoLabel}">↶ Undo ${trunc(undoLabel, 18)}</button>` : ''}
-          <button class="sm" data-act="themeCycle" title="Switch theme">◐ ${s.settings.theme}</button>
-          <button class="sm inv" data-act="logout">Lock · Back to clock</button>
+          ${undoLabel ? html`<button class="sm" data-act="undo" title="Undo: ${undoLabel}" aria-label="Undo ${undoLabel}">↶<span class="hide-sm"> Undo ${trunc(undoLabel, 18)}</span></button>` : ''}
+          <button class="sm" data-act="themeCycle" title="Theme: ${s.settings.theme}" aria-label="Switch theme">◐<span class="hide-sm"> ${s.settings.theme}</span></button>
+          <button class="sm inv" data-act="logout">Lock<span class="hide-sm"> · Back to clock</span></button>
         </div></header>
       <nav class="tabs noprint" role="tablist">${Admin.tabs.map(([k, l]) => html`<button role="tab" aria-selected="${ui.tab === k}" class="${ui.tab === k ? 'on' : ''}" data-act="tab" data-k="${k}">${l}${k === 'dashboard' && alerts ? html` <span class="badge" aria-label="${alerts} alerts">${alerts}</span>` : ''}</button>`)}</nav>
       <main class="wrap">${Views[ui.tab]()}</main>`;
@@ -389,7 +389,7 @@ function breakRow(b){
     <button type="button" class="sm" data-act="removeRow" aria-label="Remove break">✕</button></div>`;
 }
 function ruleRow(r){
-  return html`<div class="grid dyn" style="max-width:520px">
+  return html`<div class="grid dyn rule" style="max-width:520px">
     <div><label>Shift ≥ hours</label><input type="number" step="0.25" min="0" name="rh" value="${r.h}"></div>
     <div><label>Break minutes</label><input type="number" step="1" min="0" name="rm" value="${r.m}"></div>
     <button type="button" class="sm" data-act="removeRow" aria-label="Remove rule">✕</button></div>`;
@@ -414,15 +414,15 @@ const Views = {
       </div>
       <div class="cols">
         <div class="section"><h3>On the clock now (${open.length})</h3>
-          ${open.length ? html`<div class="tablewrap" style="box-shadow:none"><table>
+          ${open.length ? html`<div class="tablewrap" style="box-shadow:none"><table class="stack">
             <thead><tr><th class="l">Employee</th><th>In</th><th>Elapsed</th><th class="l">Status</th><th>Break</th><th></th></tr></thead>
             <tbody>${open.map(sh => { const b = openBreak(sh), c = Pay.shift(sh, s.settings, now); return html`<tr>
-              <td class="l">${empName(sh.empId)}</td>
-              <td>${fmtTime(sh.in)}${ymd(sh.in) !== ymd(now) ? html` <small>${fmtDay(sh.in)}</small>` : ''}</td>
-              <td data-elapsed="${sh.in}"></td>
-              <td class="l">${b ? html`<span class="tag">ON BREAK</span>` : html`<span class="tag b">WORKING</span>`}</td>
-              <td>${fmtMin(c.actual)}</td>
-              <td><button class="sm" data-act="forceOut" data-id="${sh.id}">Clock out</button></td></tr>`; })}</tbody>
+              <td class="l head">${empName(sh.empId)}</td>
+              <td data-label="In">${fmtTime(sh.in)}${ymd(sh.in) !== ymd(now) ? html` <small>${fmtDay(sh.in)}</small>` : ''}</td>
+              <td data-label="Elapsed" data-elapsed="${sh.in}"></td>
+              <td class="l" data-label="Status">${b ? html`<span class="tag">ON BREAK</span>` : html`<span class="tag b">WORKING</span>`}</td>
+              <td data-label="Break">${fmtMin(c.actual)}</td>
+              <td data-label=""><button class="sm" data-act="forceOut" data-id="${sh.id}">Clock out</button></td></tr>`; })}</tbody>
           </table></div>` : html`<span class="muted">Nobody is clocked in.</span>`}
         </div>
         <div class="section"><h3>Alerts (${alerts.length})</h3>
@@ -435,7 +435,7 @@ const Views = {
       </div>
       <div class="cols">
         <div class="section"><h3>Paid hours by day · this week</h3>${barChart(DAYS.map((d, i) => ({ label: d, value: T.days[i] })))}</div>
-        <div class="section"><h3>Paid hours by employee · dashed line = ${tier}h tier</h3>
+        <div class="section"><h3>Paid hours by employee</h3>
           ${rows.some(r => r.paid > 0) ? barChart(rows.filter(r => r.paid > 0).map(r => ({ label: r.e.name, value: r.paid })), { ref: tier || null })
             : html`<span class="muted">No hours recorded this week yet.</span>`}</div>
       </div>`;
@@ -447,27 +447,26 @@ const Views = {
       <button class="thbtn" data-act="sort" data-k="${k}">${label}${ui.sort.k === k ? (ui.sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`;
     return html`${weekNav()}
       <h2 class="title">Weekly hours & pay · ${fmtDay(ui.weekStart)} – ${fmtDay(end)} ${end.getFullYear()}</h2>
-      <p class="muted" style="margin:0 0 14px">Paid hours = worked hours − break deducted. Rate 1 applies to the first ${tier} paid hours of the week, Rate 2 after that. Click a column heading to sort.</p>
-      <div class="tablewrap"><table>
+      <div class="tablewrap"><table class="stack">
         <thead><tr>${th('name', 'Employee', 'l')}${DAYS.map(d => html`<th>${d}</th>`)}${th('total', 'Worked')}<th>Break</th>${th('paid', 'Paid hrs')}
           <th>First ${tier}h</th><th>After ${tier}h</th>${th('gross', 'Gross')}<th>+ Allow.</th><th>− Deduct.</th>${th('net', 'Net pay')}<th class="noprint"></th></tr></thead>
         <tbody>
         ${rows.length ? rows.map(r => html`<tr>
-          <td class="l"><a href="#" class="lnk" style="color:inherit;font-weight:700" data-act="showShifts" data-id="${r.e.id}">${r.e.name}</a>${r.open ? html` <span class="tag b">ON</span>` : ''}</td>
-          ${r.days.map(d => html`<td>${d ? fmtHM(d) : html`<span class="muted">–</span>`}</td>`)}
-          <td>${fmtHM(r.total)}</td><td>${fmtMin(r.ded)}</td><td><b>${fmtHM(r.paid)}</b><br><small>${r.paid.toFixed(2)}h</small></td>
-          <td>${r.h1.toFixed(2)}h × ${r.r1 ? money(r.r1) : html`<b>?</b>`}<br><small>${money(r.p1)}</small></td>
-          <td>${r.h2.toFixed(2)}h × ${r.r2 ? money(r.r2) : html`<b>?</b>`}<br><small>${money(r.p2)}</small></td>
-          <td>${money(r.gross)}</td><td>${money(r.allow)}</td><td>${money(r.deduct)}</td><td class="net">${money(r.net)}</td>
-          <td class="noprint"><button class="sm" data-act="adjust" data-id="${r.e.id}">± Adjust</button>
+          <td class="l head"><a href="#" class="lnk" style="color:inherit;font-weight:700" data-act="showShifts" data-id="${r.e.id}">${r.e.name}</a>${r.open ? html` <span class="tag b">ON</span>` : ''}</td>
+          ${r.days.map((d, i) => html`<td class="d" data-label="${DAYS[i]}">${d ? fmtHM(d) : html`<span class="muted">–</span>`}</td>`)}
+          <td data-label="Worked">${fmtHM(r.total)}</td><td data-label="Break">${fmtMin(r.ded)}</td><td data-label="Paid hrs"><b>${fmtHM(r.paid)}</b><br class="hide-sm"><small class="hide-sm">${r.paid.toFixed(2)}h</small></td>
+          <td data-label="First ${tier}h"><span>${r.h1.toFixed(2)}h × ${r.r1 ? money(r.r1) : html`<b>?</b>`}<br><small>${money(r.p1)}</small></span></td>
+          <td data-label="After ${tier}h"><span>${r.h2.toFixed(2)}h × ${r.r2 ? money(r.r2) : html`<b>?</b>`}<br><small>${money(r.p2)}</small></span></td>
+          <td data-label="Gross">${money(r.gross)}</td><td data-label="+ Allowances">${money(r.allow)}</td><td data-label="− Deductions">${money(r.deduct)}</td><td class="net" data-label="Net pay">${money(r.net)}</td>
+          <td class="noprint" data-label=""><button class="sm" data-act="adjust" data-id="${r.e.id}">± Adjust</button>
             <button class="sm" data-act="payslip" data-id="${r.e.id}">Payslip</button></td></tr>`)
           : html`<tr><td class="l" colspan="19"><span class="muted">No employees yet.</span></td></tr>`}
-        ${rows.length ? html`<tr class="tot"><td class="l">TOTAL</td>${T.days.map(d => html`<td>${fmtHM(d)}</td>`)}
-          <td>${fmtHM(T.total)}</td><td>${fmtMin(T.ded)}</td><td>${fmtHM(T.paid)}</td><td>${T.h1.toFixed(2)}h<br><small>${money(T.p1)}</small></td>
-          <td>${T.h2.toFixed(2)}h<br><small>${money(T.p2)}</small></td><td>${money(T.gross)}</td><td>${money(T.allow)}</td><td>${money(T.deduct)}</td><td>${money(T.net)}</td><td class="noprint"></td></tr>` : ''}
+        ${rows.length ? html`<tr class="tot"><td class="l head">TOTAL</td>${T.days.map((d, i) => html`<td class="d" data-label="${DAYS[i]}">${fmtHM(d)}</td>`)}
+          <td data-label="Worked">${fmtHM(T.total)}</td><td data-label="Break">${fmtMin(T.ded)}</td><td data-label="Paid hrs">${fmtHM(T.paid)}</td><td data-label="First ${tier}h"><span>${T.h1.toFixed(2)}h<br><small>${money(T.p1)}</small></span></td>
+          <td data-label="After ${tier}h"><span>${T.h2.toFixed(2)}h<br><small>${money(T.p2)}</small></span></td><td data-label="Gross">${money(T.gross)}</td><td data-label="+ Allowances">${money(T.allow)}</td><td data-label="− Deductions">${money(T.deduct)}</td><td class="net" data-label="Net pay">${money(T.net)}</td><td class="noprint hide-sm"></td></tr>` : ''}
         </tbody>
       </table></div>
-      <div class="row noprint">
+      <div class="row noprint actions-grid">
         <button class="inv" data-act="exportXlsx">Excel (.xlsx)</button>
         <button class="inv" data-act="exportPdf">PDF report</button>
         <button class="inv" data-act="payslipsAll">Payslips PDF</button>
@@ -488,18 +487,17 @@ const Views = {
       </div>
       <div class="section"><h3>Timeline</h3>
         <div class="scrollx">${timeline(ui.weekStart, ui.shiftFilter)}</div>
-        <small>Solid = completed · outlined = still on the clock · hatched = break · red line = now. Click a shift to edit it.</small>
       </div>
-      <div class="tablewrap"><table>
+      <div class="tablewrap"><table class="stack">
         <thead><tr><th class="l">Employee</th><th class="l">Date</th><th>In</th><th>Out</th><th class="l">Breaks taken</th>
           <th>Worked</th><th>Break taken</th><th>Break by rule</th><th>Deducted</th><th>Paid</th><th></th></tr></thead>
         <tbody>
         ${list.length ? list.map(sh => { const c = Pay.shift(sh, s.settings, now); return html`<tr>
-          <td class="l">${empName(sh.empId)}</td><td class="l">${fmtDay(sh.in)}</td><td>${fmtTime(sh.in)}</td>
-          <td>${sh.out ? html`${fmtTime(sh.out)}${ymd(sh.out) !== ymd(sh.in) ? html` <small>+1d</small>` : ''}` : html`<span class="tag b">ON CLOCK</span>`}</td>
-          <td class="l">${sh.breaks.length ? sh.breaks.map((bk, i) => html`${i ? html`<br>` : ''}${fmtTime(bk.start)}–${bk.end ? fmtTime(bk.end) : '…'}`) : html`<span class="muted">none</span>`}</td>
-          <td>${fmtHM(c.total)}</td><td>${fmtMin(c.actual)}</td><td>${fmtMin(c.policy)}</td><td>${fmtMin(c.ded)}</td><td><b>${fmtHM(c.paid)}</b></td>
-          <td><button class="sm" data-act="editShift" data-id="${sh.id}">Edit</button> <button class="sm" data-act="delShift" data-id="${sh.id}" aria-label="Delete shift">✕</button></td></tr>`; })
+          <td class="l head">${empName(sh.empId)}<span class="sm-only"> · ${fmtDay(sh.in)}</span></td><td class="l hide-sm" data-label="Date">${fmtDay(sh.in)}</td><td data-label="In">${fmtTime(sh.in)}</td>
+          <td data-label="Out">${sh.out ? html`<span>${fmtTime(sh.out)}${ymd(sh.out) !== ymd(sh.in) ? html` <small>+1d</small>` : ''}</span>` : html`<span class="tag b">ON CLOCK</span>`}</td>
+          <td class="l" data-label="Breaks">${sh.breaks.length ? sh.breaks.map((bk, i) => html`${i ? html`<br>` : ''}${fmtTime(bk.start)}–${bk.end ? fmtTime(bk.end) : '…'}`) : html`<span class="muted">none</span>`}</td>
+          <td data-label="Worked">${fmtHM(c.total)}</td><td class="hide-sm" data-label="Break taken">${fmtMin(c.actual)}</td><td class="hide-sm" data-label="Break by rule">${fmtMin(c.policy)}</td><td data-label="Deducted">${fmtMin(c.ded)}</td><td data-label="Paid"><b>${fmtHM(c.paid)}</b></td>
+          <td data-label=""><button class="sm" data-act="editShift" data-id="${sh.id}">Edit</button> <button class="sm" data-act="delShift" data-id="${sh.id}" aria-label="Delete shift">✕</button></td></tr>`; })
         : html`<tr><td class="l" colspan="11"><span class="muted">No shifts this week.</span></td></tr>`}
         </tbody>
       </table></div>`;
@@ -520,7 +518,7 @@ const Views = {
         <input type="search" placeholder="Search employees…" value="${ui.empQuery}" data-input="empSearch" style="max-width:320px" aria-label="Search employees">
         <button class="sm" data-act="togglePins">${ui.showPins ? 'Hide' : 'Show'} codes</button>
       </div>
-      <div class="tablewrap"><table>
+      <div class="tablewrap"><table class="stack">
         <thead><tr><th class="l">Name</th><th>Code</th><th>Rate first ${tier}h</th><th>Rate after ${tier}h</th><th>Paid this week</th><th class="l">Status</th><th></th></tr></thead>
         <tbody id="empRows">${Views.empRows()}</tbody>
       </table></div>`;
@@ -532,10 +530,10 @@ const Views = {
       .sort((a, b) => (a.active === false) - (b.active === false) || a.name.localeCompare(b.name));
     if(!list.length) return html`<tr><td class="l" colspan="7"><span class="muted">${q ? 'No matches.' : 'No employees yet.'}</span></td></tr>`;
     return html`${list.map(e => html`<tr>
-      <td class="l">${e.name}</td><td>${ui.showPins ? e.pin : '••••'}</td><td>${rateCell(e.rate1)}</td><td>${rateCell(e.rate2)}</td>
-      <td>${fmtHM(week.get(e.id) ?? 0)}</td>
-      <td class="l">${e.active === false ? html`<span class="tag">INACTIVE</span>` : html`<span class="tag b">ACTIVE</span>`}</td>
-      <td><button class="sm" data-act="editEmp" data-id="${e.id}">Edit</button> <button class="sm" data-act="showShifts" data-id="${e.id}">Shifts</button></td></tr>`)}`;
+      <td class="l head">${e.name}</td><td data-label="Code">${ui.showPins ? e.pin : '••••'}</td><td data-label="Rate 1">${rateCell(e.rate1)}</td><td data-label="Rate 2">${rateCell(e.rate2)}</td>
+      <td data-label="Paid this week">${fmtHM(week.get(e.id) ?? 0)}</td>
+      <td class="l" data-label="Status">${e.active === false ? html`<span class="tag">INACTIVE</span>` : html`<span class="tag b">ACTIVE</span>`}</td>
+      <td data-label=""><button class="sm" data-act="editEmp" data-id="${e.id}">Edit</button> <button class="sm" data-act="showShifts" data-id="${e.id}">Shifts</button></td></tr>`)}`;
   },
 
   audit(){
@@ -543,8 +541,7 @@ const Views = {
         <input type="search" placeholder="Search log…" value="${ui.auditQuery}" data-input="auditSearch" style="max-width:320px" aria-label="Search audit log">
         <button class="sm" data-act="exportAudit">Export CSV</button>
       </div>
-      <p class="muted" style="margin-top:0">Every punch and admin change is stored in the database. The latest 300 matches are shown; the CSV export has everything.</p>
-      <div class="tablewrap"><table>
+      <div class="tablewrap"><table class="stack">
         <thead><tr><th class="l">When</th><th class="l">Who</th><th class="l">Action</th><th class="l">Detail</th></tr></thead>
         <tbody id="auditRows">${Views.auditRows()}</tbody>
       </table></div>`;
@@ -552,7 +549,7 @@ const Views = {
   auditRows(){
     const list = ui.auditRows;
     if(!list.length) return html`<tr><td class="l" colspan="4"><span class="muted">${ui.auditQuery.trim() ? 'No matches.' : 'Nothing logged yet.'}</span></td></tr>`;
-    return html`${list.map(a => html`<tr><td class="l">${fmtStamp(a.ts)}</td><td class="l">${a.actor}</td><td class="l"><b>${a.action}</b></td><td class="l wrap-text">${a.detail}</td></tr>`)}`;
+    return html`${list.map(a => html`<tr><td class="l" data-label="When">${fmtStamp(a.ts)}</td><td class="l" data-label="Who">${a.actor}</td><td class="l" data-label="Action"><b>${a.action}</b></td><td class="l wrap-text" data-label="Detail">${a.detail}</td></tr>`)}`;
   },
 
   settings(){
@@ -566,7 +563,6 @@ const Views = {
           <div><label for="sTheme">Theme</label><select id="sTheme" name="theme">${opt('auto', st.theme, 'Follow device')}${opt('light', st.theme, 'Light')}${opt('dark', st.theme, 'Dark')}</select></div>
         </div></div>
         <div class="section"><h3>Break rules</h3>
-          <p class="muted" style="margin-top:0">If a shift is at least this many hours long, this much break is deducted. The highest matching rule applies.</p>
           <div id="rules">${st.breakRules.map(ruleRow)}</div>
           <div class="row"><button type="button" class="sm" data-act="addRule">+ Add rule</button></div>
           <label for="sMode">How to deduct the break</label>
@@ -592,7 +588,6 @@ const Views = {
         <button class="inv" type="submit">Update PIN</button>
       </form>
       <div class="section"><h3>Backup</h3>
-        <p class="muted" style="margin-top:0">All data is stored in the server database (data/timeclock.db). Daily snapshots are kept in data/backups. You can also download a portable backup file, or restore one (including backups from the old browser-only version).</p>
         <div class="row tight"><button data-act="backup">Download backup</button>
           <label class="btn" style="margin:0">Restore from backup<input type="file" accept=".json,application/json" class="sr" data-change="importFile"></label>
           <button data-act="erase">Erase all data</button></div>
@@ -634,7 +629,7 @@ const Dialogs = {
         ${s.employees.map(e => html`<option value="${e.id}" ${sel === e.id ? 'selected' : ''}>${e.name}${e.active === false ? ' (inactive)' : ''}</option>`)}</select></div></div>
       <div class="grid two">
         <div><label for="fIn">Clock in</label><input type="datetime-local" id="fIn" name="in" value="${toLocalInput(sh ? sh.in : +ui.weekStart + 9 * H)}" required></div>
-        <div><label for="fOut">Clock out <small>(blank = still on)</small></label><input type="datetime-local" id="fOut" name="out" value="${toLocalInput(sh?.out)}"></div>
+        <div><label for="fOut">Clock out <small>(optional)</small></label><input type="datetime-local" id="fOut" name="out" value="${toLocalInput(sh?.out)}"></div>
       </div>
       <div id="brows">${(sh?.breaks || []).map(b => breakRow(b))}</div>
       <div class="row"><button type="button" class="sm" data-act="addBreakRow">+ Add break</button></div>
@@ -655,9 +650,7 @@ const Dialogs = {
         <div><label for="mAct">Status</label><select id="mAct" name="active"><option value="1">Active</option><option value="0" ${e.active === false ? 'selected' : ''}>Inactive (cannot clock in)</option></select></div>
       </div>
       <div class="row"><button class="inv" type="submit">Save</button><button type="button" data-act="modalCancel">Cancel</button>
-        ${has ? '' : html`<button type="button" data-act="delEmp" data-id="${id}">Delete</button>`}</div>
-      ${has ? html`<small>This employee has shift history, so set them Inactive instead of deleting.</small>` : ''}
-    </form>`);
+        ${has ? '' : html`<button type="button" data-act="delEmp" data-id="${id}">Delete</button>`}</div>    </form>`);
   }
 };
 

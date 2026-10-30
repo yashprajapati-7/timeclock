@@ -116,12 +116,87 @@ svg .tl-shift:hover rect{opacity:.8}
 .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:14px 20px;font-weight:700;border:3px solid var(--paper);outline:3px solid var(--ink);z-index:30;max-width:calc(100% - 32px);text-align:center;display:flex;gap:14px;align-items:center}
 .toast button{border-color:var(--paper);box-shadow:none}
 
+html{-webkit-text-size-adjust:100%}
+.brand{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar .row.tight{flex-wrap:nowrap}
+.sm-only{display:none}
+.tabs{scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+
 @media (max-width:820px){
   .kiosk{grid-template-columns:1fr;padding:16px;gap:20px}
   .clockcard{min-height:auto}
   .wrap{padding:16px}
   .bar{padding:12px 16px}
   .grid.two{grid-template-columns:1fr}
+}
+
+/* Phones */
+@media (max-width:700px){
+  html,body{font-size:14px}
+  input,select{font-size:16px}
+  .hide-sm{display:none!important}
+  .sm-only{display:inline}
+  button.sm,.btn.sm{padding:8px 12px}
+
+  .bar{padding:10px 12px;flex-wrap:nowrap}
+  .brand{font-size:16px}
+  .brand::before{width:11px;height:11px;margin-right:8px}
+  .bar button.sm{padding:8px 10px}
+  .tabs{position:sticky;top:0;z-index:5;background:var(--paper)}
+  .tabs button{padding:12px 14px;font-size:13px}
+  .wrap{padding:12px}
+
+  .kiosk{padding:12px;gap:14px}
+  .card{padding:18px;box-shadow:5px 5px 0 var(--ink);border-width:3px}
+  .clockcard{padding:16px}
+  .big{font-size:52px}
+  .date{font-size:13px;margin-top:6px}
+  .onnow{margin-top:12px;padding-top:10px;font-size:12px}
+  .pins{margin:14px 0 18px;gap:10px}
+  .pins span{width:46px;height:52px}
+  .keys{gap:10px}
+  .keys button{font-size:24px;padding:12px 0}
+  .name{font-size:24px}
+  .acts{gap:12px;margin-top:14px}
+  .acts button{font-size:18px;padding:15px}
+
+  .weeknav{display:grid;grid-template-columns:auto 1fr auto;gap:8px}
+  .weeknav b{text-align:center;font-size:12px;padding:0}
+  .weeknav input{grid-column:span 2}
+  h2.title{font-size:17px}
+  .section{padding:14px}
+  .kpis{grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{padding:10px;box-shadow:3px 3px 0 var(--ink)}
+  .kpi .v{font-size:20px}
+  .cols{gap:0}
+  .alerts li{flex-wrap:wrap}
+  .actions-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .actions-grid button{width:100%;padding:12px 8px;font-size:13px}
+
+  /* Data tables become one card per row, each value labelled */
+  .tablewrap{box-shadow:4px 4px 0 var(--ink)}
+  table.stack thead{display:none}
+  table.stack,table.stack tbody,table.stack tr{display:block;width:100%}
+  table.stack tr{border-bottom:3px solid var(--ink)}
+  table.stack tr:last-child{border-bottom:0}
+  table.stack td{display:flex;justify-content:space-between;align-items:baseline;gap:12px;border:0;border-bottom:1px solid var(--soft);padding:7px 12px;white-space:normal;text-align:right}
+  table.stack td::before{content:attr(data-label);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;text-align:left;color:var(--muted);flex:none}
+  table.stack td.head{font-size:16px;font-weight:700;background:var(--soft);justify-content:flex-start;text-align:left}
+  table.stack td.head::before{content:none}
+  table.stack td[data-label=""]{justify-content:flex-end;gap:10px}
+  table.stack td[data-label=""]::before{content:none}
+  table.stack td.d,table.stack td.hide-sm{display:none}
+  table.stack td.net{font-size:16px}
+  table.stack td.wrap-text{min-width:0}
+  table.stack tr.tot td{border-top:0;background:var(--soft)}
+
+  .modal{padding:12px 8px}
+  .modal .box{padding:18px;box-shadow:6px 6px 0 var(--ink);border-width:3px}
+  .dyn{grid-template-columns:1fr}
+  .dyn.rule{grid-template-columns:1fr 1fr}
+  .dyn > button{grid-column:1/-1;justify-self:start}
+  .toast{bottom:12px;width:calc(100% - 24px);max-width:none;flex-wrap:wrap;justify-content:center;padding:12px 14px;font-size:13px}
 }
 @media print{
   .noprint{display:none!important}
