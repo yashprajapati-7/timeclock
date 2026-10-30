@@ -83,10 +83,10 @@ test('kiosk shows only today\'s roster for that employee and prices punches with
   assert.equal(inRes.calc.lateMin, 8);
   clock.t = dd(2026, 10, 30, 17, 20);
   const out = (await request(app).post('/api/kiosk/punch').send({ pin: '2222', type: 'out' })).body;
-  assert.equal(out.calc.paid, 6.75);
-  assert.equal(out.calc.paidOut, dd(2026, 10, 30, 17));
+  assert.equal(out.calc.paid, 7);
+  assert.equal(out.calc.paidOut, dd(2026, 10, 30, 17, 15));
   const after = (await request(app).post('/api/kiosk/identify').send({ pin: '2222' })).body;
-  assert.equal(after.todayPaid, 6.75);
-  assert.equal(after.weekPaid, 6.75);
+  assert.equal(after.todayPaid, 7);
+  assert.equal(after.weekPaid, 7);
   void db;
 });

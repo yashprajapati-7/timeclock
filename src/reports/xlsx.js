@@ -53,14 +53,14 @@ function shiftsSheet(wb, report){
     { header: 'Break taken min', width: 14 }, { header: 'Break by rule min', width: 15 }, { header: 'Deducted min', width: 13 },
     { header: 'Paid hrs', width: 10, style: { numFmt: HOURS } },
     { header: 'Rostered', width: 18 }, { header: 'Paid in', width: 9 }, { header: 'Paid out', width: 9 },
-    { header: 'Late min', width: 9 }, { header: 'Over min (unpaid)', width: 16 },
+    { header: 'Late min', width: 9 }, { header: 'Overtime min', width: 13 },
   ];
   headerStyle(ws.getRow(1));
   for(const s of report.shiftsAll)
     ws.addRow([s.name, s.date, hm(s.in), s.out ? hm(s.out) : 'OPEN',
       s.breaks.map(b => `${hm(b.start)}–${b.end ? hm(b.end) : '…'}`).join('; '),
       s.calc.total, s.calc.actual, s.calc.policy, s.calc.ded, s.calc.paid,
-      s.rosterLabel, hm(s.calc.paidIn), hm(s.calc.paidOut), s.calc.lateMin, s.calc.capped]);
+      s.rosterLabel, hm(s.calc.paidIn), hm(s.calc.paidOut), s.calc.lateMin, s.calc.overMin]);
   ws.autoFilter = { from: 'A1', to: 'O1' };
 }
 

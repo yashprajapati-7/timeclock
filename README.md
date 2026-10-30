@@ -49,7 +49,7 @@ You can also download a portable JSON backup any time from Admin → Settings �
 
 ## Roster and pay rounding
 
-The **Roster** tab is the weekly staff × day grid (Cafe, Bakery, Training, Delivery, Bake, Bakery YC, Off). Tap a day to add shifts (type `9.30` + AM/PM, or `17:00`), use the presets, copy a week forward, clear a week, or download the **Roster PDF**.
+The **Roster** tab is the weekly staff × day grid (Cafe, Bakery, Training, Delivery, Bake, Bakery YC, Off). Tap a day to add shifts (type `9.30` + AM/PM, or `17:00`) or use the presets, press **Done**, then **Save roster** to store the changes. You can also copy a week forward, clear a week, or download the **Roster PDF**.
 
 **Import old roster** copies everything from the old GJ06 roster app (or an exported JSON file). It always shows a preview first: the date range, matched staff, new staff (they get a random kiosk code, shown once), and how many already-worked shifts would be re-priced. The old app saved every day one day early (a UTC bug), so the import moves dates **+1 day** by default; you can change that in the preview. Re-running the import is safe — it remembers which old staff member is which employee and changes nothing that is already the same.
 
@@ -59,7 +59,7 @@ When **Rounding starts** (Settings → Pay rules) is set to a Monday, paid times
 - Late start → rounded **up** to the next quarter hour (9:08 → 9:15). Tagged **LATE**.
 - Early start → paid from the rostered start.
 - Leaving early → rounded **down** to the quarter hour. Tagged **EARLY**.
-- Staying past the rostered finish → paid to the rostered finish unless an admin ticks **Approve overtime** on the shift. Tagged **OVER** and shown on the dashboard.
+- Staying past the rostered finish → overtime is paid (rounded down to the quarter hour) and tagged **OT** on the Shifts page and payslip.
 - No roster that day → actual times.
 
 Raw clock times are never changed: the Shifts page always shows actual and paid times side by side, and earlier weeks are never re-priced. **Note:** most of these rules favour the employer. Check them against your award / Fair Work obligations before relying on them; you can switch rounding off at any time.

@@ -65,7 +65,7 @@ export function matchRoster(empShifts, roster = {}, empId, st){
 // Paid in/out for one shift given its roster match (no match → actual times).
 export function paidSpan(sh, match, st, now = Date.now()){
   const outRaw = sh.out ?? now;
-  const res = { paidIn: sh.in, paidOut: outRaw, lateMin: 0, earlyMin: 0, capped: 0 };
+  const res = { paidIn: sh.in, paidOut: outRaw, lateMin: 0, earlyMin: 0, overMin: 0 };
   if(!match) return res;
   const g = num(st.roundGraceMin) * MIN, step = num(st.roundStepMin) || 15;
   const inM = floorMin(sh.in), outM = floorMin(outRaw), { S, E } = match;
@@ -76,8 +76,9 @@ export function paidSpan(sh, match, st, now = Date.now()){
   if(match.last){
     if(outM >= E - g && outM <= E + g) res.paidOut = E;
     else if(outM > E + g){
-      if(sh.otApproved) res.paidOut = Math.max(E, floorStep(outM, step));
-      else { res.paidOut = E; res.capped = Math.round((outM - E) / MIN); }
+      // Overtime is paid (down to the quarter hour, never below the rostered finish) and flagged.
+      res.paidOut = Math.max(E, floorStep(outM, step));
+      res.overMin = Math.round((outM - E) / MIN);
     } else if(sh.out != null){
       res.paidOut = floorStep(outM, step);
       res.earlyMin = Math.round((E - outM) / MIN);
@@ -101,7 +102,7 @@ export function shift(sh, st, now = Date.now(), match){
   const policy = policyBreak(spanMin / 60, st.breakRules);
   const ded = Math.min(spanMin, st.breakMode === 'policy' ? policy : st.breakMode === 'actual' ? actual : Math.max(policy, actual));
   return { total: totalMin / 60, actual, policy, ded, paid: (spanMin - ded) / 60, open: sh.out == null,
-    paidIn: p.paidIn, paidOut: p.paidOut, span: spanMin / 60, lateMin: p.lateMin, earlyMin: p.earlyMin, capped: p.capped,
+    paidIn: p.paidIn, paidOut: p.paidOut, span: spanMin / 60, lateMin: p.lateMin, earlyMin: p.earlyMin, overMin: p.overMin,
     roster: match?.entry ?? null };
 }
 
@@ -227,8 +228,6 @@ export function anomalies(data, ws, now = Date.now()){
     for(const sh of data.shifts){
       const c = calcs.get(sh.id);
       if(!c) continue;
-      if(c.capped > 0)
-        out.push({ level:'med', msg:`${name(sh.empId)} stayed ${c.capped} min past the rostered end on ${fmtDay(sh.in)} (not paid unless approved).`, shiftId: sh.id });
       const rostered = ((data.roster || {})[`${ymd(sh.in)}|${sh.empId}`] || []).some(x => TIMED.includes(x.type));
       if(!c.roster && rostered && sh.in >= from)
         out.push({ level:'med', msg:`${name(sh.empId)} clocked in outside their rostered time on ${fmtDay(sh.in)}.`, shiftId: sh.id });

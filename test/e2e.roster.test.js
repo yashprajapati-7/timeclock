@@ -44,14 +44,14 @@ test('roster to payslip, end to end on a file database', async (t) => {
   clock.t = d(2026, 10, 30, 17, 20);
   await request(app).post('/api/kiosk/punch').send({ pin, type: 'out' });
 
-  // 4. Report data and Excel: paid 9:15–17:00, late once; salary + allowance for MISHILA.
+  // 4. Report data and Excel: paid 9:15–17:15 (overtime paid), late once; salary + allowance for MISHILA.
   const a2 = await loginAgent(app);       // the 9-hour kiosk day outlasted the admin session
   const x = await a2.get('/api/admin/export/payroll.xlsx?week=2026-10-26').buffer(true).parse(binary);
   const wb = new ExcelJS.Workbook(); await wb.xlsx.load(x.body);
   const sh = wb.getWorksheet('Shifts'), head = sh.getRow(1).values.slice(1);
   const himRow = [...Array(sh.rowCount - 1)].map((_, i) => sh.getRow(i + 2)).find(r => r.getCell(1).value === 'Him');
   assert.equal(himRow.getCell(head.indexOf('Paid in') + 1).value, '09:15');
-  assert.equal(himRow.getCell(head.indexOf('Paid out') + 1).value, '17:00');
+  assert.equal(himRow.getCell(head.indexOf('Paid out') + 1).value, '17:15');
   assert.equal(himRow.getCell(head.indexOf('Late min') + 1).value, 8);
   const pay = wb.getWorksheet('Payroll');
   const mRow = pay.getRows(3, pay.rowCount - 3).find(r => r.getCell(1).value === 'MISHILA');

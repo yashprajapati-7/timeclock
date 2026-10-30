@@ -71,11 +71,10 @@ test('finish rounding table (roster end 17:00)', () => {
   assert.equal(paid(t(9), t(16, 55)).paidOut, t(17));
   assert.equal(paid(t(9), t(17, 6)).paidOut, t(17));
   const over = paid(t(9), t(17, 25));
-  assert.deepEqual([over.paidOut, over.capped], [t(17), 25]);
-  assert.equal(paid(t(9), t(17, 25), { otApproved: true }).paidOut, t(17, 15));
+  assert.deepEqual([over.paidOut, over.overMin], [t(17, 15), 25]);   // overtime is paid (to the quarter) and flagged
   const early = paid(t(9), t(16, 40));
   assert.deepEqual([early.paidOut, early.earlyMin], [t(16, 30), 20]);
-  assert.equal(paid(t(9), null, {}, undefined, ST, t(18)).paidOut, t(17));      // open shift past end stops at 17:00
+  assert.equal(paid(t(9), null, {}, undefined, ST, t(18)).paidOut, t(18));      // still on the clock past the end: overtime counts
   assert.equal(paid(t(9), null, {}, undefined, ST, t(12)).paidOut, t(12));      // still working: no "early" rounding
   assert.equal(paid(t(9), null, {}, undefined, ST, t(12)).earlyMin, 0);
   const zero = paid(t(16, 50), t(16, 52));
@@ -97,24 +96,24 @@ test('shift() uses the paid span: 9:20–17:30 rostered 9–17', () => {
   const s = sh('s', t(9, 20), t(17, 30));
   const c = shift(s, ST, Date.now(), match1(s, roster(DAY, cafe('09:00', '17:00'))));
   assert.equal(c.total, 8 + 10 / 60);          // actual worked 8:10
-  assert.equal(c.span, 7.5);                    // paid span 9:30–17:00
+  assert.equal(c.span, 8);                      // paid span 9:30–17:30 (overtime paid)
   assert.equal(c.ded, 60);
-  assert.equal(c.paid, 6.5);
+  assert.equal(c.paid, 7);
   assert.equal(c.lateMin, 20);
-  assert.equal(c.capped, 30);
+  assert.equal(c.overMin, 30);
   assert.equal(c.roster.start, '09:00');
 });
 
 test('break deduction on the paid span for each break mode', () => {
   const r = roster(DAY, cafe('09:00', '17:00'));
-  // Worked 8:30–17:40 (late break 16:50–17:30 partly outside the paid span 9:00–17:00).
+  // Worked 8:30–17:40, paid 9:00–17:30 (early start from the roster, overtime paid to the quarter).
   const s = sh('b', t(8, 30), t(17, 40), { breaks: [{ start: t(12), end: t(12, 20) }, { start: t(16, 50), end: t(17, 30) }] });
   const m = match1(s, r);
   const pol = shift(s, { ...ST, breakMode: 'policy' }, 0, m);
-  assert.deepEqual([pol.span, pol.ded, pol.paid], [8, 60, 7]);
+  assert.deepEqual([pol.span, pol.ded, pol.paid], [8.5, 60, 7.5]);
   const act = shift(s, { ...ST, breakMode: 'actual' }, 0, m);
-  assert.equal(act.actual, 30);                 // 20 + 10 minutes inside the paid span
-  assert.equal(act.ded, 30);
+  assert.equal(act.actual, 60);                 // both breaks fall inside the paid span
+  assert.equal(act.ded, 60);
   const max = shift(s, { ...ST, breakMode: 'greater' }, 0, m);
   assert.equal(max.ded, 60);
 });
@@ -140,12 +139,12 @@ test('rosterWeek hours use break rules; OFF counted', () => {
   assert.equal(w.total, 13);
 });
 
-test('anomalies: unpaid overtime and salaried without a salary', () => {
+test('anomalies: salaried without a salary (overtime is paid, not an anomaly)', () => {
   const data = { settings: { ...ST, maxShiftHours: 14 }, adj: {}, roster: roster(DAY, cafe('09:00', '17:00')),
     employees: [{ id: 'e1', name: 'Ann', rate1: 20, active: true, payType: 'hourly' }, { id: 'e2', name: 'Sal', rate1: null, active: true, payType: 'salary', weeklySalary: null }],
     shifts: [sh('ot', t(9), t(17, 40))] };
   const a = anomalies(data, new Date(2026, 9, 26), t(20));
-  assert.ok(a.some(x => x.level === 'med' && x.shiftId === 'ot' && /40 min/.test(x.msg)));
+  assert.ok(!a.some(x => x.shiftId === 'ot'));
   assert.ok(a.some(x => x.empId === 'e2' && /salar/i.test(x.msg)));
 });
 
@@ -159,8 +158,8 @@ test('match: a clock-in inside one entry is never stolen by a later entry that d
   assert.equal(match1(sh('d', t(5), t(12)), split).entry.start, '09:00');
 });
 
-test('approved overtime never pays less than the rostered finish', () => {
+test('overtime never pays less than the rostered finish', () => {
   const r = roster(DAY, cafe('09:00', '17:50'));
-  assert.equal(paid(t(9), t(17, 57), { otApproved: true }, r).paidOut, t(17, 50));
-  assert.equal(paid(t(9), t(18, 20), { otApproved: true }, r).paidOut, t(18, 15));
+  assert.equal(paid(t(9), t(17, 57), {}, r).paidOut, t(17, 50));
+  assert.equal(paid(t(9), t(18, 20), {}, r).paidOut, t(18, 15));
 });

@@ -187,7 +187,7 @@ function timeline(ws, empFilter){
 
 // ---------- UI state ----------
 const app = $('#app');
-const ui = { view: 'kiosk', tab: 'dashboard', weekStart: startOfWeek(new Date()), shiftFilter: '', empQuery: '', auditQuery: '', auditRows: [], sort: { k: 'name', dir: 1 }, showPins: false };
+const ui = { rosterDraft: {}, view: 'kiosk', tab: 'dashboard', weekStart: startOfWeek(new Date()), shiftFilter: '', empQuery: '', auditQuery: '', auditRows: [], sort: { k: 'name', dir: 1 }, showPins: false };
 
 function applyTheme(){ document.documentElement.dataset.theme = 'light'; }   // one light theme everywhere
 function render(){ applyTheme(); ui.view === 'kiosk' ? Kiosk.render() : Admin.render(); }
@@ -401,19 +401,29 @@ const weekParam = () => `week=${ymd(ui.weekStart)}`;
 
 const chipType = t => t === 'BAKERY YC' ? 'BKYC' : t;
 // Save one roster day; asks first when the change re-prices shifts that were already worked.
-async function saveRosterCell(entries){
-  const { empId, day } = ui.rosterEdit, path = `/api/admin/roster/${encodeURIComponent(empId)}/${day}`;
-  if(day < ymd(Date.now())){
-    const dry = await api.put(path, { entries, dryRun: true }).catch(e => { Toast.show(e.message, {ms:4000}); return null; });
-    if(!dry) return;
-    if(dry.repriced && !await Modal.confirm(`This changes paid times for ${dry.repriced} shift(s) already worked on or around this day.`, { title: 'Change a past roster day?', ok: 'Change' })) return;
-  }
-  if(await RemoteStore.call('put', path, { entries })){ Modal.close(true); Toast.show('Roster saved', {ms:1800}); }
-}
-// Day editor changes stay local until Save.
+// Roster edits are kept as drafts (ui.rosterDraft, "day|empId" → entries) until "Save roster".
+const draftKeys = () => Object.keys(ui.rosterDraft);
+function rosterWithDrafts(s){ return { ...s, roster: { ...s.roster, ...ui.rosterDraft } }; }
 function editRosterDraft(entries){
   ui.rosterEdit.entries = entries;
   const box = $('#rosterEntries'); if(box) box.innerHTML = Views.rosterEntries();
+}
+async function saveRoster(){
+  const keys = draftKeys().sort(), today = ymd(Date.now());
+  const path = k => `/api/admin/roster/${encodeURIComponent(k.slice(11))}/${k.slice(0, 10)}`;
+  let repriced = 0;
+  for(const k of keys.filter(k => k.slice(0, 10) < today)){
+    const dry = await api.put(path(k), { entries: ui.rosterDraft[k], dryRun: true }).catch(e => { Toast.show(e.message, {ms:4000}); return null; });
+    if(!dry) return;
+    repriced += dry.repriced || 0;
+  }
+  if(repriced && !await Modal.confirm(`This changes paid times for ${repriced} shift(s) already worked.`, { title: 'Save roster', ok: 'Save' })) return;
+  for(const k of keys){
+    if(!await RemoteStore.call('put', path(k), { entries: ui.rosterDraft[k] })) return Admin.render();
+    delete ui.rosterDraft[k];
+  }
+  Admin.render();
+  Toast.show(`Roster saved (${keys.length} day${keys.length === 1 ? '' : 's'})`, {ms:2000});
 }
 
 // Employee form fields shared by "Add employee" and the edit dialog. data-pay on the form shows hourly or salary inputs.
@@ -472,9 +482,8 @@ function paidTimes(sh, c){
   if(!c.roster) return html`${fmtTime(c.paidIn)}–${sh.out ? fmtTime(c.paidOut) : '…'} ${db().settings.roundFrom && ymd(sh.in) >= db().settings.roundFrom ? html`<span class="tag">UNROSTERED</span>` : ''}`;
   return html`${fmtTime(c.paidIn)}–${sh.out ? fmtTime(c.paidOut) : '…'}
     ${c.lateMin > num(db().settings.roundGraceMin) ? html`<span class="tag late">LATE ${c.lateMin}m</span>` : ''}
-    ${c.capped ? html`<span class="tag brk" title="Not paid unless overtime is approved">OVER ${c.capped}m</span>` : ''}
-    ${c.earlyMin ? html`<span class="tag brk">EARLY ${c.earlyMin}m</span>` : ''}
-    ${sh.otApproved ? html`<span class="tag ok">OT OK</span>` : ''}`;
+    ${c.overMin ? html`<span class="tag brk" title="Overtime (paid)">OT ${c.overMin}m</span>` : ''}
+    ${c.earlyMin ? html`<span class="tag brk">EARLY ${c.earlyMin}m</span>` : ''}`;
 }
 
 const Views = {
@@ -520,23 +529,20 @@ const Views = {
   },
 
   roster(){
-    const s = db(), w = Pay.rosterWeek(s, ui.weekStart), today = ymd(Date.now());
+    const s = db(), w = Pay.rosterWeek(rosterWithDrafts(s), ui.weekStart), today = ymd(Date.now()), changes = draftKeys().length;
     return html`${weekNav()}
       <div class="row noprint actions-grid">
+        ${changes ? html`<button class="inv save-roster" data-act="rosterSaveAll">Save roster (${changes})</button><button data-act="rosterDiscard">Discard</button>` : ''}
         <button class="inv" data-act="rosterCopy">Copy to next week</button>
         <button data-act="rosterPdf">Roster PDF</button>
         <button data-act="rosterImport">Import old roster</button>
         <button data-act="rosterClear">Clear week</button>
       </div>
-      ${s.settings.rounding !== false && s.settings.roundFrom
-        ? html`<p class="tag ok" style="display:block;padding:8px 10px;margin:0 0 14px">✓ LATE CHECK ON since ${fmtDay(new Date(s.settings.roundFrom + 'T00:00'))} · clock-ins are compared with this roster</p>`
-        : html`<div class="row" style="padding:10px;border:2px solid var(--s-late);background:var(--s-late-bg);border-radius:8px">
-            <span><b>Late check is off.</b> Clock-ins are not compared with the roster yet, so nobody is marked late.</span>
-            <button class="inv" data-act="rosterStartLate">Save roster &amp; start late check</button></div>`}
+      ${s.settings.rounding !== false && s.settings.roundFrom ? '' : html`<div class="row"><button class="inv" data-act="rosterStartLate">Start late check</button></div>`}
       <div class="tablewrap roster-wrap"><table class="roster-grid">
         <thead><tr><th class="rname">Staff</th>${w.days.map((dd, i) => html`<th class="${dd === today ? 'today' : ''}">${DAYS[i]}<br><small>${dd.slice(8)}/${dd.slice(5, 7)}</small></th>`)}<th>Hrs</th></tr></thead>
         <tbody>${w.rows.length ? w.rows.map(r => html`<tr><td class="rname">${r.name}</td>
-          ${r.cells.map((entries, i) => html`<td class="rcell ${w.days[i] === today ? 'today' : ''}" data-act="rosterCell" data-emp="${r.empId}" data-day="${w.days[i]}" title="${r.name} · ${fmtDay(new Date(w.days[i] + 'T00:00'))}">
+          ${r.cells.map((entries, i) => html`<td class="rcell ${w.days[i] === today ? 'today' : ''} ${ui.rosterDraft[`${w.days[i]}|${r.empId}`] ? 'draft' : ''}" data-act="rosterCell" data-emp="${r.empId}" data-day="${w.days[i]}" title="${r.name} · ${fmtDay(new Date(w.days[i] + 'T00:00'))}">
             ${entries.length ? entries.map(e => html`<span class="chip t-${chipType(e.type)}">${rosterLabel(e)}</span>`) : html`<span class="muted">+</span>`}</td>`)}
           <td><b>${r.total ? r.total.toFixed(1) : '–'}</b></td></tr>`)
           : html`<tr><td class="l" colspan="9"><span class="muted">No staff yet.</span></td></tr>`}</tbody>
@@ -723,7 +729,7 @@ const Views = {
 const Dialogs = {
   rosterCell(empId, day){
     const e = empById(empId); if(!e) return;
-    ui.rosterEdit = { empId, day, entries: (db().roster[`${day}|${empId}`] || []).map(({ type, start, end }) => ({ type, start, end })) };
+    ui.rosterEdit = { empId, day, entries: (rosterWithDrafts(db()).roster[`${day}|${empId}`] || []).map(({ type, start, end }) => ({ type, start, end })) };
     Modal.open(html`<h2 id="modalTitle">${e.name}</h2><p style="margin-top:0">${fmtDay(new Date(day + 'T00:00'))}</p>
       <div id="rosterEntries">${Views.rosterEntries()}</div>
       <div class="row">${['OFF', 'DELIVERY', 'BAKE', 'BAKERY YC'].map(t => html`<button type="button" class="sm" data-act="rosterPreset" data-k="${t}">${t}</button>`)}</div>
@@ -737,7 +743,7 @@ const Dialogs = {
         </div>
         <div class="row"><button type="submit">+ Add shift</button><button type="button" data-act="rosterClearCell">Clear day</button></div>
       </form>
-      <div class="row"><button class="inv" type="button" data-act="rosterSave">Save</button><button type="button" data-act="modalCancel">Cancel</button></div>`);
+      <div class="row"><button class="inv" type="button" data-act="rosterSave">Done</button><button type="button" data-act="modalCancel">Cancel</button></div>`);
   },
   rosterImport(preview){
     if(!preview){
@@ -803,7 +809,6 @@ const Dialogs = {
       <div id="brows">${(sh?.breaks || []).map(b => breakRow(b))}</div>
       <div class="row"><button type="button" class="sm" data-act="addBreakRow">+ Add break</button></div>
       ${c ? html`<p class="muted">${c.roster ? html`Rostered ${c.roster.type} ${c.roster.start}–${c.roster.end} · paid ${paidTimes(sh, c)}<br>` : ''}Worked ${fmtHM(c.total)} − deducted ${fmtMin(c.ded)} = paid <b>${fmtHM(c.paid)}</b></p>` : ''}
-      <label style="display:flex;gap:8px;align-items:center;text-transform:none"><input type="checkbox" name="otApproved" style="width:auto" ${sh?.otApproved ? 'checked' : ''}> Approve overtime (pay to the actual finish)</label>
       <div class="row"><button class="inv" type="submit">Save</button><button type="button" data-act="modalCancel">Cancel</button>
         ${sh ? html`<button type="button" data-act="delShift" data-id="${sh.id}">Delete</button>` : ''}</div>
     </form>`);
@@ -875,11 +880,16 @@ const Actions = {
       if(!start || !end) return Toast.show('Enter times like 9.30 or 17:00', {ms:2500});
       entries.push({ type: $('#rType').value, start, end });
     }
-    return saveRosterCell(entries);
+    const { empId, day } = ui.rosterEdit, key = `${day}|${empId}`, saved = db().roster[key] || [];
+    const same = JSON.stringify(entries.map(({ type, start, end }) => [type, start ?? null, end ?? null])) === JSON.stringify(saved.map(({ type, start, end }) => [type, start ?? null, end ?? null]));
+    if(same) delete ui.rosterDraft[key]; else ui.rosterDraft[key] = entries;
+    Modal.close(true); Admin.render();
   },
+  rosterSaveAll: () => saveRoster(),
+  rosterDiscard: () => { ui.rosterDraft = {}; Admin.render(); },
   rosterStartLate: async () => {
     const from = ymd(startOfWeek(new Date()));
-    if(!await Modal.confirm(`From ${fmtDay(new Date(from + 'T00:00'))} clock-ins are checked against this roster: up to 6 min late is paid from the rostered start, later rounds up to the next 15 min and is marked LATE.`, { title: 'Start late check', ok: 'Start' })) return;
+    if(!await Modal.confirm(`Start late check from ${fmtDay(new Date(from + 'T00:00'))}?`, { title: 'Start late check', ok: 'Start' })) return;
     if(await RemoteStore.call('put', '/api/admin/settings', { rounding: true, roundFrom: from })) Toast.show('Late check is on', {ms:2000});
   },
   rosterPdf: () => downloadFile(`/api/admin/export/roster.pdf?${weekParam()}`),
@@ -1105,7 +1115,7 @@ const Forms = {
       if(start) breaks.push({ start, end });
     }
     // The server re-validates everything (inside shift, no overlaps, no clash) and answers 422 with the reason.
-    const body = { empId, in: tin, out: tout, breaks, otApproved: fd.get('otApproved') === 'on' };
+    const body = { empId, in: tin, out: tout, breaks };
     const ok = id ? await RemoteStore.call('put', `/api/admin/shifts/${id}`, body) : await RemoteStore.call('post', '/api/admin/shifts', body);
     if(ok){ Modal.close(true); undoToast('Shift saved'); }
   },

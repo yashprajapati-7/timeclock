@@ -28,8 +28,8 @@ test('model exposes salary, fixed items, late counts and paid in/out', () => {
   assert.deepEqual([bob.late, bob.lateMin], [1, 8]);
   const s = bob.shifts[0];
   assert.equal(s.calc.paidIn, d(2026, 10, 27, 9, 15));
-  assert.equal(s.calc.paidOut, d(2026, 10, 27, 17));
-  assert.equal(s.calc.capped, 20);
+  assert.equal(s.calc.paidOut, d(2026, 10, 27, 17, 15));
+  assert.equal(s.calc.overMin, 20);
   assert.equal(s.rosterLabel, 'CAFE 09:00–17:00');
 });
 
@@ -45,7 +45,7 @@ test('Excel: Salary replaces Gross; shifts show paid times; fixed items listed',
   assert.equal(salRow.getCell(col).value, 800);
   const shifts = wb.getWorksheet('Shifts');
   const head = shifts.getRow(1).values.slice(1);
-  assert.ok(head.includes('Paid in') && head.includes('Paid out') && head.includes('Late min') && head.includes('Over min (unpaid)'));
+  assert.ok(head.includes('Paid in') && head.includes('Paid out') && head.includes('Late min') && head.includes('Overtime min'));
   assert.equal(shifts.getRow(2).getCell(head.indexOf('Paid in') + 1).value, '09:15');
   const adj = [];
   wb.getWorksheet('Adjustments').eachRow(r => adj.push(r.values.slice(1)));
@@ -63,7 +63,7 @@ test('PDF lines: payroll has Salary not Gross; payslip keeps Gross pay and shows
   assert.ok(salSlip.some(k => k === '+ Phone (fixed)'));
   assert.ok(!salSlip.some(k => /First 24h/.test(k)));
   assert.ok(payslipSummary(bob, rep).some(([k]) => /First 24h/.test(k)));
-  assert.match(timesheetRow(bob.shifts[0]).join(' | '), /09:15–17:00 LATE/);
+  assert.match(timesheetRow(bob.shifts[0]).join(' | '), /09:15–17:15 LATE OT 20m/);
   assert.equal((await payrollPdf(rep)).subarray(0, 5).toString(), '%PDF-');
   assert.equal((await payslipsPdf(rep)).subarray(0, 5).toString(), '%PDF-');
 });
@@ -112,4 +112,10 @@ test('payslip timesheet lists all 7 days: worked, OFF, rostered but absent, noth
   assert.equal(rows[2][1], 'OFF');
   assert.equal(rows[2][2], 'OFF');
   assert.equal(rows[3][2], 'ABSENT');
+});
+
+test('payslip has no signature lines; payroll PDF has no instruction footnote', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('../src/reports/pdf.js', import.meta.url), 'utf8');
+  assert.ok(!/signature/i.test(src));
+  assert.ok(!src.includes('Paid hours = worked'));
 });

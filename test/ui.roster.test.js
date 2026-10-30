@@ -44,7 +44,8 @@ test('report: Gross removed, salary and late shown, payslip emails', () => {
 
 test('shifts, dashboard, settings, kiosk', () => {
   has('data-label="Paid times"');
-  has('name="otApproved"');
+  has('OT ${c.overMin}m');
+  assert.ok(!js.includes('name="otApproved"'), 'no approve-overtime box');
   has('Coming up');
   has('Pay.upcoming(');
   assert.ok(!js.includes('<h3>Alerts'), 'dashboard alerts panel removed');
@@ -53,10 +54,13 @@ test('shifts, dashboard, settings, kiosk', () => {
   has('Rostered today');
 });
 
-test('roster day editor saves only on Save; late check can be started from the roster page', () => {
+test('roster edits are drafts until "Save roster"; late check can be started from the roster page', () => {
   has('data-act="rosterSave"');
   has('function editRosterDraft');
+  has('data-act="rosterSaveAll"');
+  has('data-act="rosterDiscard"');
+  has('function saveRoster');
   has('data-act="rosterStartLate"');
-  has('LATE CHECK ON');
+  assert.ok(!js.includes('Late check is off.'), 'no instruction text');
   assert.doesNotMatch(js, /rosterPreset: d => saveRosterCell/);
 });

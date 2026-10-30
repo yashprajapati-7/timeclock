@@ -107,7 +107,7 @@ export function payslipSummary(r, report){
 }
 export function timesheetRow(s){
   const c = s.calc, rounded = c.paidIn !== s.in || c.paidOut !== (s.out ?? c.paidOut);
-  const tags = [c.lateMin > 0 && c.paidIn > s.in ? 'LATE' : '', c.capped ? `OVER ${c.capped}m` : '', c.earlyMin ? 'EARLY' : ''].filter(Boolean).join(' ');
+  const tags = [c.lateMin > 0 && c.paidIn > s.in ? 'LATE' : '', c.overMin ? `OT ${c.overMin}m` : '', c.earlyMin ? 'EARLY' : ''].filter(Boolean).join(' ');
   return [s.date, hm(s.in), s.out ? hm(s.out) + (new Date(s.out).getDate() !== new Date(s.in).getDate() ? ' +1d' : '') : 'OPEN',
     rounded || tags ? `${hm(c.paidIn)}–${hm(c.paidOut)}${tags ? ' ' + tags : ''}` : '—',
     s.breaks.map(b => `${hm(b.start)}–${b.end ? hm(b.end) : '…'}`).join(', ') || '—',
@@ -141,8 +141,6 @@ export function payrollPdf(report, opts = {}){
   const salary = report.rows.reduce((a, r) => a + (r.salary ?? 0), 0);
   rows.push(payrollLine({ ...report.totals, name: 'TOTAL', r1: 0, r2: 0, salary }, report));
   table(doc, columns, rows, { bold: new Set([rows.length - 1]) });
-  doc.font('Mono').fontSize(7).fillColor('#555')
-    .text(`Paid hours = worked − break deducted. Rate 1 applies to the first ${tier} paid hours of the week, Rate 2 after that.`);
   return finish(doc);
 }
 
@@ -151,7 +149,7 @@ export function payslipsPdf(report, empIds = 'all', opts = {}){
   if(empIds !== 'all' && rows.length !== empIds.length) return Promise.reject(new HttpError(404, 'Employee not found for this week'));
   if(!rows.length) return Promise.reject(new HttpError(404, 'No employees with data this week'));
   const doc = newDoc(`Payslips ${report.weekStart}`, opts);
-  const M = n => money(n, report.currency), x = doc.page.margins.left, R = 'right';
+  const M = n => money(n, report.currency), R = 'right';
   rows.forEach((r, i) => {
     if(i) doc.addPage();
     header(doc, report, 'Timesheet & payslip', r.name);
@@ -163,12 +161,6 @@ export function payslipsPdf(report, empIds = 'all', opts = {}){
       { label: 'Day', width: 56 }, { label: 'Roster', width: 76 }, { label: 'In', width: 38 }, { label: 'Out', width: 44 }, { label: 'Paid time', width: 96 },
       { label: 'Breaks', width: 62 }, { label: 'Worked', width: 46, align: R }, { label: 'Deducted', width: 48, align: R }, { label: 'Paid', width: 46, align: R },
     ], payslipDays(r, report), { fontSize: 8 });
-    doc.moveDown(3);
-    const y = doc.y;
-    doc.moveTo(x, y).lineTo(x + 200, y).lineWidth(0.8).stroke();
-    doc.moveTo(x + 280, y).lineTo(x + 480, y).stroke();
-    doc.font('Mono').fontSize(8).text('Employee signature', x, y + 4);
-    doc.text('Manager signature', x + 280, y + 4);
   });
   return finish(doc);
 }
