@@ -187,7 +187,7 @@ function timeline(ws, empFilter){
 
 // ---------- UI state ----------
 const app = $('#app');
-const ui = { rosterDraft: {}, view: 'kiosk', tab: 'dashboard', weekStart: startOfWeek(new Date()), shiftFilter: '', empQuery: '', auditQuery: '', auditRows: [], sort: { k: 'name', dir: 1 }, showPins: false };
+const ui = { rosterDraft: {}, view: 'kiosk', tab: 'dashboard', weekStart: startOfWeek(new Date()), shiftFilter: '', empQuery: '', auditQuery: '', auditRows: [], sort: { k: 'name', dir: 1 } };
 
 function applyTheme(){ document.documentElement.dataset.theme = 'light'; }   // one light theme everywhere
 function render(){ applyTheme(); ui.view === 'kiosk' ? Kiosk.render() : Admin.render(); }
@@ -566,9 +566,9 @@ const Views = {
       <div class="tablewrap"><table class="stack">
         <thead><tr>${th('name', 'Employee', 'l')}${ui.showDays ? DAYS.map((d, i) => html`<th>${i ? d : html`<button class="thbtn" data-act="toggleDays" title="Hide days">◂ ${d}</button>`}</th>`)
             : html`<th><button class="thbtn" data-act="toggleDays" title="Show every day">Week ▸</button></th>`}${th('total', 'Worked')}<th>Break</th>${th('paid', 'Paid hrs')}
-          <th>First ${tier}h</th><th>After ${tier}h</th><th>Salary</th><th>+ Allow.</th><th>− Deduct.</th>${th('net', 'Net pay')}<th class="noprint"></th></tr></thead>
+          <th>First ${tier}h</th><th>After ${tier}h</th><th>Salary</th><th>+ Allow.</th><th>− Deduct.</th>${th('net', 'Net pay')}<th class="toggle"></th><th class="noprint"></th></tr></thead>
         <tbody>
-        ${rows.length ? rows.map(r => html`<tr>
+        ${rows.length ? rows.map(r => html`<tr class="fold">
           <td class="l head"><a href="#" class="lnk" style="color:inherit;font-weight:700" data-act="showShifts" data-id="${r.e.id}">${r.e.name}</a>${r.open ? html` <span class="tag b">ON</span>` : ''}${r.late ? html` <span class="tag late" title="${r.lateMin} min late in total">LATE×${r.late}</span>` : ''}</td>
           ${ui.showDays ? r.days.map((d, i) => html`<td class="d" data-label="${DAYS[i]}">${d ? fmtHM(d) : html`<span class="muted">–</span>`}</td>`)
             : html`<td class="d hide-sm" data-label="Week">${r.days.filter(Boolean).length} day${r.days.filter(Boolean).length === 1 ? '' : 's'}</td>`}
@@ -576,14 +576,15 @@ const Views = {
           <td data-label="First ${tier}h"><span>${r.h1.toFixed(2)}h × ${r.r1 ? money(r.r1) : html`<b>?</b>`}<br><small>${money(r.p1)}</small></span></td>
           <td data-label="After ${tier}h"><span>${r.h2.toFixed(2)}h × ${r.r2 ? money(r.r2) : html`<b>?</b>`}<br><small>${money(r.p2)}</small></span></td>
           <td data-label="Salary">${r.salary == null ? html`<span class="muted">–</span>` : money(r.salary)}</td><td data-label="+ Allowances">${money(r.allow)}</td><td data-label="− Deductions">${money(r.deduct)}</td><td class="net" data-label="Net pay">${money(r.net)}</td>
+          <td class="toggle" data-label=""><button class="sm" data-act="toggleRow" aria-expanded="false">Details ▾</button></td>
           <td class="noprint" data-label=""><button class="sm" data-act="adjust" data-id="${r.e.id}">± Adjust</button>
             <button class="sm" data-act="payslip" data-id="${r.e.id}">Payslip</button>
             <button class="sm" data-act="emailPayslip" data-id="${r.e.id}" ${s.mailConfigured && r.e.email ? '' : 'disabled'}
               title="${!s.mailConfigured ? 'Email is not set up on the server' : r.e.email ? 'Email payslip to ' + r.e.email : 'No email address'}">Email</button></td></tr>`)
           : html`<tr><td class="l" colspan="19"><span class="muted">No employees yet.</span></td></tr>`}
-        ${rows.length ? html`<tr class="tot"><td class="l head">TOTAL</td>${ui.showDays ? T.days.map((d, i) => html`<td class="d" data-label="${DAYS[i]}">${fmtHM(d)}</td>`) : html`<td class="d hide-sm" data-label="Week"></td>`}
+        ${rows.length ? html`<tr class="tot fold"><td class="l head">TOTAL</td>${ui.showDays ? T.days.map((d, i) => html`<td class="d" data-label="${DAYS[i]}">${fmtHM(d)}</td>`) : html`<td class="d hide-sm" data-label="Week"></td>`}
           <td data-label="Worked">${fmtHM(T.total)}</td><td data-label="Break">${fmtMin(T.ded)}</td><td data-label="Paid hrs">${fmtHM(T.paid)}</td><td data-label="First ${tier}h"><span>${T.h1.toFixed(2)}h<br><small>${money(T.p1)}</small></span></td>
-          <td data-label="After ${tier}h"><span>${T.h2.toFixed(2)}h<br><small>${money(T.p2)}</small></span></td><td data-label="Salary">${money(rows.reduce((a, r) => a + (r.salary ?? 0), 0))}</td><td data-label="+ Allowances">${money(T.allow)}</td><td data-label="− Deductions">${money(T.deduct)}</td><td class="net" data-label="Net pay">${money(T.net)}</td><td class="noprint hide-sm"></td></tr>` : ''}
+          <td data-label="After ${tier}h"><span>${T.h2.toFixed(2)}h<br><small>${money(T.p2)}</small></span></td><td data-label="Salary">${money(rows.reduce((a, r) => a + (r.salary ?? 0), 0))}</td><td data-label="+ Allowances">${money(T.allow)}</td><td data-label="− Deductions">${money(T.deduct)}</td><td class="net" data-label="Net pay">${money(T.net)}</td><td class="toggle" data-label=""><button class="sm" data-act="toggleRow" aria-expanded="false">Details ▾</button></td><td class="noprint hide-sm"></td></tr>` : ''}
         </tbody>
       </table></div>
       <div class="row noprint actions-grid">
@@ -626,39 +627,30 @@ const Views = {
   },
 
   employees(){
-    return html`<form class="section" data-submit="empAdd" data-pay="hourly"><h3>Add employee</h3>
-        ${empFields({})}
-        <div class="row tight"><button class="inv" type="submit">Add employee</button><button type="button" class="sm" data-act="suggestPin">Suggest a free code</button></div>
-      </form>
-      <div class="row">
+    return html`<div class="row">
+        <button class="inv" data-act="addEmp">+ Add employee</button>
         <input type="search" placeholder="Search employees…" value="${ui.empQuery}" data-input="empSearch" style="max-width:320px" aria-label="Search employees">
-        <button class="sm" data-act="togglePins">${ui.showPins ? 'Hide' : 'Show'} codes</button>
       </div>
-      <div class="tablewrap"><table class="stack">
-        <thead><tr><th class="l">Name</th><th>Code</th><th>Pay</th><th class="l">Contact</th><th>Paid this week</th><th class="l">Status</th><th></th></tr></thead>
+      <div class="tablewrap"><table class="emp-list">
+        <thead><tr><th class="l">Name</th><th>Pay</th><th class="l">Status</th></tr></thead>
         <tbody id="empRows">${Views.empRows()}</tbody>
       </table></div>`;
   },
   empRows(){
     const q = ui.empQuery.trim().toLowerCase();
-    const week = new Map(Pay.week(db(), startOfWeek(new Date())).map(r => [r.e.id, r.paid]));
     const soon = new Map(Pay.upcoming(db().employees, Date.now()).map(u => [u.empId + u.kind, u]));
     const list = db().employees.filter(e => !q || e.name.toLowerCase().includes(q) || (e.role || '').toLowerCase().includes(q))
       .sort((a, b) => (a.active === false) - (b.active === false) || a.name.localeCompare(b.name));
-    if(!list.length) return html`<tr><td class="l" colspan="7"><span class="muted">${q ? 'No matches.' : 'No employees yet.'}</span></td></tr>`;
+    if(!list.length) return html`<tr><td class="l" colspan="3"><span class="muted">${q ? 'No matches.' : 'No employees yet.'}</span></td></tr>`;
     const pay = e => e.payType === 'salary'
       ? (e.weeklySalary == null ? html`<b>not set</b>` : html`${money(num(e.weeklySalary))}<small>/wk</small>`)
       : e.payType === 'fixed' ? html`${rateCell(e.rate1)} <small>all hours</small>` : html`${rateCell(e.rate1)} / ${rateCell(e.rate2)}`;
-    return html`${list.map(e => html`<tr>
-      <td class="l head">${e.name}
-        ${soon.get(e.id + 'birthday') ? html` <span class="tag ok" title="Birthday soon">🎂 BDAY</span>` : ''}
+    return html`${list.map(e => html`<tr class="click" data-act="editEmp" data-id="${e.id}" tabindex="0" title="Open ${e.name}">
+      <td class="l"><b>${e.name}</b>
+        ${soon.get(e.id + 'birthday') ? html` <span class="tag ok" title="Birthday soon">🎂</span>` : ''}
         ${soon.get(e.id + 'anniversary') ? html` <span class="tag ok" title="Work anniversary soon">🎉 ${soon.get(e.id + 'anniversary').years}Y</span>` : ''}</td>
-      <td data-label="Code">${ui.showPins ? e.pin : '••••'}</td>
-      <td data-label="Pay">${pay(e)}</td>
-      <td class="l" data-label="Email">${e.email ? html`✓ ${e.email}` : html`<span class="muted">no email</span>`}${e.phone ? html`<br><small>${e.phone}</small>` : ''}</td>
-      <td data-label="Paid this week">${fmtHM(week.get(e.id) ?? 0)}</td>
-      <td class="l" data-label="Status">${e.active === false ? html`<span class="tag">INACTIVE</span>` : html`<span class="tag b">ACTIVE</span>`}</td>
-      <td data-label=""><button class="sm" data-act="editEmp" data-id="${e.id}">Edit</button> <button class="sm" data-act="showShifts" data-id="${e.id}">Shifts</button></td></tr>`)}`;
+      <td>${pay(e)}</td>
+      <td class="l">${e.active === false ? html`<span class="tag">INACTIVE</span>` : html`<span class="tag b">ACTIVE</span>`}</td></tr>`)}`;
   },
   audit(){
     return html`<div class="row">
@@ -813,10 +805,19 @@ const Dialogs = {
         ${sh ? html`<button type="button" data-act="delShift" data-id="${sh.id}">Delete</button>` : ''}</div>
     </form>`);
   },
+  empNew(){
+    Modal.open(html`<form data-submit="empAdd" data-pay="hourly"><h2 id="modalTitle">Add employee</h2>
+      ${empFields({})}
+      <div class="row"><button class="inv" type="submit">Add</button><button type="button" class="sm" data-act="suggestPin">Suggest a free code</button><button type="button" data-act="modalCancel">Cancel</button></div>
+    </form>`);
+    $('#eName')?.focus();
+  },
   emp(id){
     const e = empById(id); if(!e) return;
     const has = db().shifts.some(s => s.empId === id);
-    Modal.open(html`<form data-submit="empSave" data-id="${id}" data-pay="${e.payType || 'hourly'}"><h2 id="modalTitle">Edit employee</h2>
+    const paid = Pay.week(db(), startOfWeek(new Date())).find(r => r.e.id === id)?.paid ?? 0;
+    Modal.open(html`<form data-submit="empSave" data-id="${id}" data-pay="${e.payType || 'hourly'}"><h2 id="modalTitle">${e.name}</h2>
+      <p class="muted" style="margin-top:0">Paid this week <b>${fmtHM(paid)}</b> · <a href="#" class="lnk" data-act="empShifts" data-id="${id}">Shifts</a></p>
       ${empFields(e, 'm')}
       <div class="grid one"><div><label for="mAct">Status</label><select id="mAct" name="active"><option value="1">Active</option><option value="0" ${e.active === false ? 'selected' : ''}>Inactive (cannot clock in)</option></select></div></div>
       <h3 style="margin:8px 0">Fixed weekly allowances & deductions</h3>
@@ -945,10 +946,14 @@ const Actions = {
   },
   week: d => { ui.weekStart = addDays(ui.weekStart, 7 * +d.k); Admin.render(); },
   weekToday: () => { ui.weekStart = startOfWeek(new Date()); Admin.render(); },
+  toggleRow: (d, el) => {
+    const open = el.closest('tr').classList.toggle('open');
+    el.textContent = open ? 'Hide ▴' : 'Details ▾'; el.setAttribute('aria-expanded', String(open));
+  },
   toggleDays: () => { ui.showDays = !ui.showDays; Admin.render(); },
   sort: d => { ui.sort = { k: d.k, dir: ui.sort.k === d.k ? -ui.sort.dir : (d.k === 'name' ? 1 : -1) }; Admin.render(); },
   showShifts: (d, el, ev) => { ev.preventDefault(); ui.shiftFilter = d.id; ui.tab = 'shifts'; Admin.render(); },
-  togglePins: () => { ui.showPins = !ui.showPins; $('#empRows').innerHTML = Views.empRows(); },
+  empShifts: (d, el, ev) => { Modal.close(false); Actions.showShifts(d, el, ev); },
   undo: async () => {
     try{
       const r = await api.post('/api/admin/undo');
@@ -983,6 +988,7 @@ const Actions = {
   addRule: () => $('#rules').insertAdjacentHTML('beforeend', ruleRow({ h: '', m: '' })),
   removeRow: (d, el) => el.closest('.dyn').remove(),
   editEmp: d => Dialogs.emp(d.id),
+  addEmp: () => Dialogs.empNew(),
   delEmp: async d => {
     const name = empName(d.id);
     if(!await Modal.confirm(`Delete ${name}?`, { title: 'Delete employee', ok: 'Delete' })) return;
@@ -1123,9 +1129,8 @@ const Forms = {
     const body = empBody(fd), err = body.name ? validPin(body.pin) : 'Enter a name';
     if(err) return Toast.show(err, {ms:2200});
     if(await RemoteStore.call('post', '/api/admin/employees', { ...body, active: true })){
+      Modal.close(true);
       Toast.show(`${body.name} added`, {ms:1500});
-      form.reset();
-      $('#eName')?.focus();
     }
   },
   empSave: async (fd, form) => {
@@ -1171,6 +1176,7 @@ function bindEvents(){
 
   document.addEventListener('keydown', ev => {
     if(Modal.isOpen()) return Modal.onKey(ev);
+    if(ev.key === 'Enter' && ev.target.matches?.('tr.click')) return ev.target.click();
     if(ui.view !== 'kiosk' || ev.target.matches('input,select,textarea')) return;
     if(/^[0-9]$/.test(ev.key)) Kiosk.press(ev.key);
     else if(ev.key === 'Backspace') Kiosk.press('<');

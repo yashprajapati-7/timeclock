@@ -18,7 +18,7 @@ test('phone layout rules exist', () => {
 test('data tables are stackable and labelled', () => {
   const stacked = js.match(/<table class="stack">/g) || [];
   assert.ok(stacked.length >= 5, `expected 5+ stackable tables, got ${stacked.length}`);
-  for(const label of ['Net pay', 'Paid hrs', 'Worked', 'Elapsed', 'Code', 'When'])
+  for(const label of ['Net pay', 'Paid hrs', 'Worked', 'Elapsed', 'When'])
     assert.ok(js.includes(`data-label="${label}"`), label);
 });
 
@@ -31,4 +31,10 @@ test('instruction paragraphs are gone', () => {
 test('kiosk never advertises the default admin PIN', () => {
   const kiosk = js.slice(js.indexOf('// ---------- Kiosk'), js.indexOf('// ---------- Admin'));
   assert.doesNotMatch(kiosk, /0000/);
+});
+
+test('weekly report rows fold on phones behind a Details button', () => {
+  assert.ok(js.includes('<tr class="fold">'));
+  assert.ok(js.includes('data-act="toggleRow"'));
+  assert.ok(css.includes('tr.fold:not(.open) td:not(.head):not(.net):not(.toggle){display:none}'));
 });

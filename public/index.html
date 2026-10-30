@@ -88,6 +88,10 @@
 form[data-pay="hourly"] .pay-salary,form[data-pay="hourly"] span.pay-fixed,
 form[data-pay="fixed"] .pay-salary,form[data-pay="fixed"] .pay-hourly:not(.pay-fixed),form[data-pay="fixed"] span.pay-hourly,
 form[data-pay="salary"] .pay-hourly,form[data-pay="salary"] .pay-fixed{display:none}
+th.toggle,td.toggle{display:none}
+tr.click{cursor:pointer}
+#app.admin tr.click:focus-visible td{outline:2px dashed var(--accent)}
+.emp-list td{vertical-align:middle}
 .roster-wrap{overflow-x:auto}
 .roster-grid{border-collapse:separate;border-spacing:0;min-width:760px}
 .roster-grid th,.roster-grid td{border:0;border-right:1px solid #e0e0e0;border-bottom:1px solid #e0e0e0;text-align:center;vertical-align:top;padding:4px;white-space:normal}
@@ -282,6 +286,9 @@ html{-webkit-text-size-adjust:100%}
   table.stack td[data-label=""]::before{content:none}
   table.stack td.d,table.stack td.hide-sm{display:none}
   table.stack td.net{font-size:16px}
+  /* Weekly report on phones: name + net pay; "Details" opens the rest. */
+  table.stack th.toggle,table.stack td.toggle{display:flex}
+  table.stack tr.fold:not(.open) td:not(.head):not(.net):not(.toggle){display:none}
   table.stack td.wrap-text{min-width:0}
   table.stack tr.tot td{border-top:0;background:var(--soft)}
 

@@ -28,8 +28,10 @@ test('employees: pay type, salary, contact, dates, fixed items', () => {
   for(const n of ['payType', 'weeklySalary', 'email', 'phone', 'birthday', 'startDate']) has(`name="${n}"`);
   has('value="fixed"', 'fixed rate pay type');
   has('data-act="addFixedItem"');
-  has('data-label="Pay"');
-  has('data-label="Email"');
+  // Compact list: name, pay, status; a click opens the full details.
+  has('<tr class="click" data-act="editEmp"');
+  has('data-act="addEmp"');
+  has('empNew()');
 });
 
 test('report: Gross removed, salary and late shown, payslip emails', () => {
