@@ -107,6 +107,16 @@ export function addAdjustment(db, a){
 }
 export const deleteAdjustment = (db, id) => db.run('DELETE FROM adjustments WHERE id = ?', Number(id));
 
+// ----- Payments (cash / bank given to staff, per pay week) -----
+const toPayment = r => ({ id: r.id, empId: r.emp_id, week: r.week_start, paidOn: r.paid_on, method: r.method, amount: r.amount, note: r.note, createdAt: r.created_at });
+export const listPayments = db => db.all('SELECT * FROM payments ORDER BY week_start, paid_on, id').map(toPayment);
+export const getPayment = (db, id) => db.get('SELECT * FROM payments WHERE id = ?', Number(id)) ?? null;
+export const addPayment = (db, p, now) => Number(db.run(
+  'INSERT INTO payments (emp_id, week_start, paid_on, method, amount, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  [p.empId, p.week, p.paidOn, p.method, p.amount, p.note ?? '', p.createdAt ?? now]).lastInsertRowid);
+export const deletePayment = (db, id) => db.run('DELETE FROM payments WHERE id = ?', Number(id));
+export const employeeHasPayments = (db, empId) => !!db.get('SELECT 1 x FROM payments WHERE emp_id = ? LIMIT 1', empId);
+
 // ----- Roster ('YYYY-MM-DD|empId' -> [{id,type,start,end}], like adjustments) -----
 const toEntry = r => ({ id: r.id, type: r.type, start: r.start_hm, end: r.end_hm });
 export function listRoster(db, { from, to } = {}){

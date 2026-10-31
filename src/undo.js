@@ -10,6 +10,7 @@ const snap = {
   adjustments: (db, id) => db.get('SELECT * FROM adjustments WHERE id = ?', Number(id)) ?? null,
   settings: (db, key) => db.get('SELECT * FROM settings WHERE key = ?', key) ?? null,
   roster: (db, id) => db.get('SELECT * FROM roster WHERE id = ?', Number(id)) ?? null,
+  payments: (db, id) => db.get('SELECT * FROM payments WHERE id = ?', Number(id)) ?? null,
 };
 
 // Upsert a whole row image by its own column names (stays correct as migrations add columns).
@@ -27,6 +28,10 @@ const restore = {
   roster(db, id, row){
     if(!row) return db.run('DELETE FROM roster WHERE id = ?', Number(id));
     upsertRow(db, 'roster', row);
+  },
+  payments(db, id, row){
+    if(!row) return db.run('DELETE FROM payments WHERE id = ?', Number(id));
+    upsertRow(db, 'payments', row);
   },
   shifts: (db, id, row) => row ? saveShift(db, row) : deleteShift(db, id),
   adjustments(db, id, row){

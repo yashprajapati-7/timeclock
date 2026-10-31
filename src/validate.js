@@ -137,6 +137,22 @@ export function validateSettings(patch = {}){
   return out;
 }
 
+// emp: the employee being paid (fixed-rate staff are paid in cash only).
+export function validatePayment(b = {}, emp){
+  const week = String(b.week ?? '');
+  if(!isMonday(week)) fail('Week must be a Monday (YYYY-MM-DD)');
+  if(!b.empId) fail('Choose an employee');
+  const paidOn = String(b.paidOn ?? '');
+  if(!realDate(paidOn)) fail('Date given must be a real date (YYYY-MM-DD)');
+  if(!['cash', 'bank'].includes(b.method)) fail('Payment must be cash or bank');
+  if(emp?.payType === 'fixed' && b.method !== 'cash') fail('Fixed-rate staff are paid in cash only');
+  const amount = Math.round(num(b.amount) * 100) / 100;
+  if(!(amount > 0)) fail('Enter an amount');
+  const note = String(b.note ?? '').trim();
+  if(note.length > 200) fail('Note is too long (200 characters max)');
+  return { empId: b.empId, week, paidOn, method: b.method, amount, note };
+}
+
 export function validateAdjustment(b = {}){
   const week = String(b.week ?? '');
   if(!/^\d{4}-\d{2}-\d{2}$/.test(week) || ymd(startOfWeek(new Date(week + 'T00:00'))) !== week) fail('Week must be a Monday (YYYY-MM-DD)');

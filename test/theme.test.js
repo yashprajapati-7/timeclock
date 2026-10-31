@@ -16,7 +16,7 @@ const lum = hex => {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 };
 const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
-const TABS = ['dashboard', 'roster', 'report', 'shifts', 'employees', 'audit', 'settings'];
+const TABS = ['dashboard', 'roster', 'report', 'shifts', 'employees', 'payments', 'audit', 'settings'];
 const TYPES = ['cafe', 'bakery', 'training', 'delivery', 'bake', 'bkyc', 'off'];
 
 for(const mode of ['light']){

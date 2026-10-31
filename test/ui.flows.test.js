@@ -36,7 +36,7 @@ test('admin session: login messages, state shape, idle expiry', async () => {
   assert.equal(wrong.body.remaining, 4);
   const a = await loginAgent(app);
   const s = (await a.get('/api/admin/state')).body;
-  assert.deepEqual(Object.keys(s).sort(), ['adj', 'employees', 'mailConfigured', 'roster', 'settings', 'shifts', 'undoLabel']);
+  assert.deepEqual(Object.keys(s).sort(), ['adj', 'employees', 'mailConfigured', 'payments', 'roster', 'settings', 'shifts', 'undoLabel']);
   clock.advance(6 * 60000);
   assert.equal((await a.get('/api/admin/state')).status, 401);
   await loginAgent(app);

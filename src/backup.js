@@ -2,9 +2,9 @@ import { addDaysYmd } from './shared/format.js';
 // Backup format = the legacy app's "Download backup" JSON (v1, v2) and our own v3 (adds roster, richer employees, overtime approval).
 import { ValidationError } from './errors.js';
 import { DEFAULT_SETTINGS, PUBLIC_SETTINGS, getSettings, setSettings, listEmployees, listShifts, listAdjustments,
-  listAudit, listRoster, createEmployee, saveShift, addAdjustment, addAudit, replaceRosterCell } from './repo.js';
+  listAudit, listRoster, listPayments, createEmployee, saveShift, addAdjustment, addAudit, replaceRosterCell, addPayment } from './repo.js';
 import { hashPin } from './auth/hash.js';
-import { validateSettings, validateEmployee, validateRosterEntries } from './validate.js';
+import { validateSettings, validateEmployee, validateRosterEntries, validatePayment } from './validate.js';
 
 const isNum = v => typeof v === 'number' && Number.isFinite(v);
 
@@ -14,7 +14,7 @@ export function normalizeBackup(json){
   const d = structuredClone(json);
   if(!d.v || d.v < 2){ d.v = 2; d.audit = []; }     // v1 → v2: audit trail; plaintext adminPin kept for rehash
   if(d.v < 3) d.roster = {};                         // v2 → v3: roster, richer employees, overtime approval
-  d.settings ||= {}; d.adj ||= {}; d.roster ||= {}; d.audit = Array.isArray(d.audit) ? d.audit : [];
+  d.settings ||= {}; d.adj ||= {}; d.roster ||= {}; d.payments = Array.isArray(d.payments) ? d.payments : []; d.audit = Array.isArray(d.audit) ? d.audit : [];
   const problems = [], empIds = new Set(), pins = new Set(), shiftIds = new Set();
   d.employees.forEach((e, i) => {
     if(!e || typeof e.id !== 'string' || !e.id) problems.push(`employee #${i + 1}: missing id`);
@@ -50,6 +50,12 @@ export function normalizeBackup(json){
     if(!/^\d{4}-\d{2}-\d{2}\|.+$/.test(key) || addDaysYmd(day, 0) !== day || !empIds.has(key.slice(11))){ problems.push(`roster ${key}: unknown employee or bad day`); continue; }
     try{ d.roster[key] = validateRosterEntries(list); }catch(err){ problems.push(`roster ${key}: ${err.message}`); }
   }
+  const empById = new Map(d.employees.map(e => [e?.id, e]));
+  d.payments.forEach((p, i) => {
+    if(!empById.has(p?.empId)){ problems.push(`payment #${i + 1}: unknown employee`); return; }
+    try{ d.payments[i] = { ...validatePayment(p, empById.get(p.empId)), createdAt: isNum(p.createdAt) ? p.createdAt : 0 }; }
+    catch(err){ problems.push(`payment #${i + 1}: ${err.message}`); }
+  });
   // Remembered import mapping: keep only a well-formed one.
   const ri = d.settings.rosterImport;
   const riOk = ri && typeof ri === 'object' && !Array.isArray(ri) && Number.isInteger(ri.offsetDays)
@@ -84,7 +90,7 @@ export async function importBackup(db, json, { now = Date.now() } = {}){
   const pinHash = await adminHashFrom(d.settings);
   const defaultPin = d.settings.defaultPin ?? (d.settings.adminPin == null || String(d.settings.adminPin) === '0000');
   db.tx(() => {
-    for(const t of ['breaks', 'adjustments', 'roster', 'shifts', 'employees', 'settings', 'audit', 'sessions']) db.run(`DELETE FROM ${t}`);
+    for(const t of ['breaks', 'adjustments', 'roster', 'payments', 'shifts', 'employees', 'settings', 'audit', 'sessions']) db.run(`DELETE FROM ${t}`);
     d.employees.forEach((e, i) => createEmployee(db, e, i));
     for(const s of d.shifts) saveShift(db, s);
     for(const [key, list] of Object.entries(d.adj)){
@@ -92,6 +98,7 @@ export async function importBackup(db, json, { now = Date.now() } = {}){
       list.forEach((a, i) => addAdjustment(db, { week, empId, type: a.type, label: String(a.label ?? '—'), amount: Number(a.amount) || 0, position: i }));
     }
     for(const [key, entries] of Object.entries(d.roster)) replaceRosterCell(db, key.slice(11), key.slice(0, 10), entries);
+    for(const p of d.payments) addPayment(db, p, now);
     for(const a of [...d.audit].reverse()) addAudit(db, a);
     const rosterImport = d.settings.rosterImport ? { rosterImport: d.settings.rosterImport } : {};
     setSettings(db, { ...cleanSettings(d.settings), ...rosterImport, defaultPin: !!defaultPin, adminPinHash: pinHash });
@@ -108,6 +115,7 @@ export function exportBackup(db){
     settings: { ...Object.fromEntries(Object.keys(DEFAULT_SETTINGS).map(k => [k, s[k]])), adminPinHash: s.adminPinHash,
       ...(s.rosterImport ? { rosterImport: s.rosterImport } : {}) },
     employees: listEmployees(db), shifts: listShifts(db), adj, audit: listAudit(db),
+    payments: listPayments(db).map(({ id, ...p }) => p),
     roster: Object.fromEntries(Object.entries(listRoster(db)).map(([k, list]) => [k, list.map(({ type, start, end }) => ({ type, start, end }))])),
   };
 }

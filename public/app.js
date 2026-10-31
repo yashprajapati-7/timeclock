@@ -319,7 +319,7 @@ const Kiosk = {
 // ---------- Admin ----------
 const Admin = {
   lastActive: 0, refreshedAt: 0, lockUntil: 0,
-  tabs: [['dashboard','Dashboard'],['roster','Roster'],['report','Weekly Report'],['shifts','Shifts'],['employees','Employees'],['audit','Audit Log'],['settings','Settings']],
+  tabs: [['dashboard','Dashboard'],['roster','Roster'],['report','Weekly Report'],['shifts','Shifts'],['employees','Employees'],['payments','Payments'],['audit','Audit Log'],['settings','Settings']],
   loginModal(){
     const locked = Date.now() < Admin.lockUntil;
     Modal.open(html`<form data-submit="adminLogin"><h2 id="modalTitle">Admin access</h2>
@@ -596,6 +596,44 @@ const Views = {
       </div>`;
   },
 
+  // Cash / bank given to each person for the selected pay week, against their net pay.
+  payments(){
+    const s = db(), wk = ymd(ui.weekStart), end = addDays(ui.weekStart, 6);
+    const list = (s.payments || []).filter(p => p.week === wk);
+    const paidBy = (empId, method) => list.filter(p => p.empId === empId && (!method || p.method === method)).reduce((a, p) => a + p.amount, 0);
+    const rows = Pay.week(s, ui.weekStart).filter(r => Pay.hasPay(r) || paidBy(r.e.id) > 0)
+      .map(r => ({ r, cash: paidBy(r.e.id, 'cash'), bank: paidBy(r.e.id, 'bank'), left: Math.round((r.net - paidBy(r.e.id)) * 100) / 100 }))
+      .sort((x, y) => x.r.e.name.localeCompare(y.r.e.name));
+    const sum = k => rows.reduce((a, x) => a + (k === 'net' ? x.r.net : x[k]), 0);
+    const status = x => x.left <= 0 ? html`<span class="tag ok">${x.left < 0 ? 'OVERPAID' : 'PAID'}</span>`
+      : x.cash + x.bank > 0 ? html`<span class="tag brk">PART PAID</span>` : html`<span class="tag late">NOT PAID</span>`;
+    return html`${weekNav()}
+      <h2 class="title">Payments · ${fmtDay(ui.weekStart)} – ${fmtDay(end)} ${end.getFullYear()}</h2>
+      <div class="tablewrap"><table class="stack">
+        <thead><tr><th class="l">Employee</th><th>Net pay</th><th>Cash given</th><th>Bank given</th><th>Still to pay</th><th class="l">Status</th><th class="noprint"></th></tr></thead>
+        <tbody>
+        ${rows.length ? rows.map(x => html`<tr>
+          <td class="l head"><b>${x.r.e.name}</b>${x.r.e.payType === 'fixed' ? html` <small class="muted">fixed rate · cash</small>` : ''}</td>
+          <td data-label="Net pay">${money(x.r.net)}</td><td data-label="Cash given">${money(x.cash)}</td><td data-label="Bank given">${money(x.bank)}</td>
+          <td class="net" data-label="Still to pay">${money(Math.max(0, x.left))}</td><td class="l" data-label="Status">${status(x)}</td>
+          <td class="noprint" data-label=""><button class="sm inv" data-act="payRecord" data-id="${x.r.e.id}">+ Record</button></td></tr>`)
+          : html`<tr><td class="l" colspan="7"><span class="muted">Nobody has pay this week.</span></td></tr>`}
+        ${rows.length ? html`<tr class="tot"><td class="l head">TOTAL</td><td data-label="Net pay">${money(sum('net'))}</td><td data-label="Cash given">${money(sum('cash'))}</td>
+          <td data-label="Bank given">${money(sum('bank'))}</td><td class="net" data-label="Still to pay">${money(rows.reduce((a, x) => a + Math.max(0, x.left), 0))}</td><td class="hide-sm"></td><td class="noprint hide-sm"></td></tr>` : ''}
+        </tbody></table></div>
+      <h3>Payments recorded for this week</h3>
+      <div class="tablewrap"><table class="stack">
+        <thead><tr><th class="l">Date given</th><th class="l">Employee</th><th class="l">Method</th><th>Amount</th><th class="l">Note</th><th class="noprint"></th></tr></thead>
+        <tbody>${list.length ? [...list].sort((a, b) => a.paidOn.localeCompare(b.paidOn) || a.id - b.id).map(p => html`<tr>
+          <td class="l head">${fmtDay(new Date(p.paidOn + 'T00:00'))}</td><td class="l" data-label="Employee">${empName(p.empId)}</td>
+          <td class="l" data-label="Method">${p.method === 'cash' ? 'Cash' : 'Bank'}</td><td data-label="Amount">${money(p.amount)}</td>
+          <td class="l" data-label="Note">${p.note || html`<span class="muted">–</span>`}</td>
+          <td class="noprint" data-label=""><button class="sm" data-act="payDel" data-id="${p.id}" aria-label="Remove payment">✕</button></td></tr>`)
+          : html`<tr><td class="l" colspan="6"><span class="muted">No payments recorded yet.</span></td></tr>`}</tbody>
+      </table></div>
+      <div class="row noprint"><button data-act="print">Print</button></div>`;
+  },
+
   shifts(){
     const s = db(), a = +ui.weekStart, b = +addDays(ui.weekStart, 7), now = Date.now();
     const list = s.shifts.filter(x => x.in >= a && x.in < b && (!ui.shiftFilter || x.empId === ui.shiftFilter)).sort((x, y) => x.in - y.in);
@@ -784,6 +822,22 @@ const Dialogs = {
         <div class="row"><button class="inv" type="submit">Add</button><button type="button" data-act="modalCancel">Done</button></div>
       </form>`);
   },
+  payRecord(empId){
+    const s = db(), e = empById(empId); if(!e) return;
+    const r = Pay.week(s, ui.weekStart).find(x => x.e.id === empId);
+    const given = (s.payments || []).filter(p => p.week === ymd(ui.weekStart) && p.empId === empId).reduce((a, p) => a + p.amount, 0);
+    const left = Math.max(0, Math.round(((r?.net ?? 0) - given) * 100) / 100), fixed = e.payType === 'fixed';
+    Modal.open(html`<form data-submit="payAdd" data-id="${empId}"><h2 id="modalTitle">Record payment</h2>
+      <p style="margin-top:0"><b>${e.name}</b> · pay for week of ${fmtDay(ui.weekStart)} · still to pay <b>${money(left)}</b></p>
+      <div class="grid">
+        <div><label for="pAmt">Amount</label><input id="pAmt" name="amount" type="number" step="0.01" min="0.01" value="${left ? left.toFixed(2) : ''}" required autofocus></div>
+        <div><label for="pMethod">Paid by</label><select id="pMethod" name="method">${fixed ? html`<option value="cash">Cash (fixed rate)</option>`
+          : html`<option value="cash">Cash</option><option value="bank">Bank transfer</option>`}</select></div>
+        <div><label for="pDate">Date given</label><input id="pDate" name="paidOn" type="date" value="${ymd(new Date())}" required></div>
+        <div><label for="pNote">Note</label><input id="pNote" name="note" maxlength="200" placeholder="optional"></div>
+      </div>
+      <div class="row"><button class="inv" type="submit">Save</button><button type="button" data-act="modalCancel">Cancel</button></div></form>`);
+  },
   shift(id){
     const s = db();
     if(!s.employees.length) return Toast.show('Add an employee first', {ms:2000});
@@ -965,6 +1019,10 @@ const Actions = {
   delAdj: async d => {
     if(await RemoteStore.call('del', `/api/admin/adjustments/${d.id}`)) Dialogs.adjust(d.emp);
   },
+  payRecord: d => Dialogs.payRecord(d.id),
+  payDel: async d => {
+    if(await Modal.confirm('Remove this payment from the record?', { title: 'Remove payment', ok: 'Remove' })) await RemoteStore.call('del', `/api/admin/payments/${d.id}`);
+  },
   payslip: d => downloadFile(`/api/admin/export/payslips.pdf?${weekParam()}&emp=${encodeURIComponent(d.id)}`),
   payslipsAll: () => downloadFile(`/api/admin/export/payslips.pdf?${weekParam()}&emp=all`),
   exportXlsx: () => downloadFile(`/api/admin/export/payroll.xlsx?${weekParam()}`),
@@ -1109,6 +1167,13 @@ const Forms = {
     if(amount <= 0) return Toast.show('Enter an amount', {ms:1800});
     const body = { week: ymd(ui.weekStart), empId, type: fd.get('type'), label: String(fd.get('label')).trim(), amount };
     if(await RemoteStore.call('post', '/api/admin/adjustments', body)) Dialogs.adjust(empId);
+  },
+  payAdd: async (fd, form) => {
+    const amount = num(fd.get('amount'));
+    if(amount <= 0) return Toast.show('Enter an amount', {ms:1800});
+    const body = { week: ymd(ui.weekStart), empId: form.dataset.id, method: fd.get('method') === 'bank' ? 'bank' : 'cash', amount,
+      paidOn: String(fd.get('paidOn')), note: String(fd.get('note') ?? '').trim() };
+    if(await RemoteStore.call('post', '/api/admin/payments', body)){ Modal.close(false); Toast.show('Payment recorded', {ms:1800}); }
   },
   shiftSave: async (fd, form) => {
     const id = form.dataset.id || null, empId = fd.get('empId');

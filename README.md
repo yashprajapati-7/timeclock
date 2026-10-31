@@ -65,6 +65,10 @@ When **Rounding starts** (Settings → Pay rules) is set to a Monday, paid times
 
 Raw clock times are never changed: the Shifts page always shows actual and paid times side by side, and earlier weeks are never re-priced. **Note:** most of these rules favour the employer. Check them against your award / Fair Work obligations before relying on them; you can switch rounding off at any time.
 
+## Payments
+
+The **Payments** tab is a record of the money actually given to staff for each pay week. It shows each person's net pay, cash given, bank given, how much is still to pay and a status: NOT PAID, PART PAID, PAID or OVERPAID. **+ Record** saves an amount, cash or bank, the date it was given and an optional note. You can record several payments for one week, for example some cash on Friday and the rest by bank on Monday. Fixed-rate staff are paid in cash only. Payments can be removed (with undo), are kept in backups, and an employee with payment history can only be set Inactive, not deleted.
+
 ## Employees, payslips and reminders
 
 Employees can be paid **hourly** (Rate 1 for the first N hours a week, Rate 2 after), a **fixed rate** (one rate for every hour) or a **fixed weekly salary**. Each can have an email, phone, birthday, start date and **fixed weekly allowances/deductions** that apply automatically every week they are paid. The dashboard shows birthdays and work anniversaries coming up in the next 7 days.

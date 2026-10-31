@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { HttpError, ValidationError } from '../errors.js';
 import * as R from '../repo.js';
-import { validatePin, validateEmployee, validateShift, validateSettings, validateAdjustment } from '../validate.js';
+import { validatePin, validateEmployee, validateShift, validateSettings, validateAdjustment, validatePayment } from '../validate.js';
 import { normalizeBackup, importBackup, exportBackup } from '../backup.js';
 import { ensureAdminPin } from './auth.js';
 import { clamp, fmtDay, hm, money, ymd } from '../shared/format.js';
@@ -22,7 +22,7 @@ export function adminRoutes({ db, clock, undo, mailer, backupDir }){
 
   r.get('/state', (req, res) => {
     res.json({ settings: R.publicSettings(db), employees: R.listEmployees(db), shifts: R.listShifts(db),
-      adj: R.listAdjustments(db), roster: R.listRoster(db), undoLabel: undo.label(req.session.key),
+      adj: R.listAdjustments(db), roster: R.listRoster(db), payments: R.listPayments(db), undoLabel: undo.label(req.session.key),
       mailConfigured: !!mailer?.configured });
   });
 
@@ -58,6 +58,7 @@ export function adminRoutes({ db, clock, undo, mailer, backupDir }){
   r.delete('/employees/:id', (req, res) => {
     const e = mustGet(R.getEmployee, req.params.id, 'Employee');
     if(R.employeeHasShifts(db, e.id)) throw new HttpError(409, 'This employee has shift history; set them Inactive instead');
+    if(R.employeeHasPayments(db, e.id)) throw new HttpError(409, 'This employee has payment history; set them Inactive instead');
     change(req, 'Delete employee', touch => {
       for(const a of db.all('SELECT id FROM adjustments WHERE emp_id = ?', e.id)) touch('adjustments', a.id);
       for(const r of db.all('SELECT id FROM roster WHERE emp_id = ?', e.id)) touch('roster', r.id);
@@ -149,6 +150,31 @@ export function adminRoutes({ db, clock, undo, mailer, backupDir }){
     res.json({ ok: true });
   });
 
+  // ----- Payments -----
+  const payLabel = p => `${R.getEmployee(db, p.empId ?? p.emp_id)?.name ?? '(deleted)'}: ${p.method} ${money(p.amount, R.getSettings(db).currency)}`
+    + ` on ${p.paidOn ?? p.paid_on} for week of ${p.week ?? p.week_start}`;
+  r.post('/payments', (req, res) => {
+    const emp = mustGet(R.getEmployee, req.body?.empId, 'Employee');
+    const p = validatePayment(req.body, emp);
+    let id;
+    change(req, 'Record payment', touch => {
+      id = R.addPayment(db, p, clock());
+      touch('payments', id, { created: true });
+      return payLabel(p);
+    });
+    res.json({ id });
+  });
+
+  r.delete('/payments/:id', (req, res) => {
+    const p = mustGet(R.getPayment, req.params.id, 'Payment');
+    change(req, 'Remove payment', touch => {
+      touch('payments', p.id);
+      R.deletePayment(db, p.id);
+      return payLabel(p);
+    });
+    res.json({ ok: true });
+  });
+
   // ----- Undo -----
   r.post('/undo', (req, res) => res.json({ undone: undo.undo(req.session.key) }));
 
@@ -172,7 +198,7 @@ export function adminRoutes({ db, clock, undo, mailer, backupDir }){
     if(req.body?.confirm !== 'ERASE') throw new ValidationError('Type ERASE to confirm');
     snapshotBefore(db, backupDir, 'erase', clock());
     db.tx(() => {
-      for(const t of ['breaks', 'adjustments', 'roster', 'shifts', 'employees', 'settings', 'audit']) db.run(`DELETE FROM ${t}`);
+      for(const t of ['breaks', 'adjustments', 'roster', 'payments', 'shifts', 'employees', 'settings', 'audit']) db.run(`DELETE FROM ${t}`);
     });
     await ensureAdminPin(db, clock());
     audit('Erase all data');

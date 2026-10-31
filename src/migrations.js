@@ -50,4 +50,13 @@ export const migrations = [
   DROP TABLE employees;
   ALTER TABLE employees_new RENAME TO employees;
   ` },
+  // 4: payments given to staff (cash or bank), recorded against the pay week they are for.
+  `
+  CREATE TABLE payments (id INTEGER PRIMARY KEY,
+    emp_id TEXT NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+    week_start TEXT NOT NULL, paid_on TEXT NOT NULL,
+    method TEXT NOT NULL CHECK(method IN ('cash','bank')), amount REAL NOT NULL CHECK(amount > 0),
+    note TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
+  CREATE INDEX payments_week_emp ON payments(week_start, emp_id);
+  `,
 ];

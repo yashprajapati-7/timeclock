@@ -46,7 +46,7 @@ test('state carries roster, timezone and mail status; deleting an employee remov
   const { app, db } = await makeTestApp();
   const a = await loginAgent(app);
   const s = (await a.get('/api/admin/state')).body;
-  assert.deepEqual(Object.keys(s).sort(), ['adj', 'employees', 'mailConfigured', 'roster', 'settings', 'shifts', 'undoLabel']);
+  assert.deepEqual(Object.keys(s).sort(), ['adj', 'employees', 'mailConfigured', 'payments', 'roster', 'settings', 'shifts', 'undoLabel']);
   assert.equal(s.mailConfigured, false);
   const id = (await a.post('/api/admin/employees').send({ name: 'Ann', pin: '1111' })).body.id;
   db.run("INSERT INTO roster (emp_id, day, type, position) VALUES (?, '2026-10-26', 'OFF', 0)", id);

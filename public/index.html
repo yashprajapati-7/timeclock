@@ -16,9 +16,9 @@
 /* tokens:light */
   --paper:#ffffff; --on-accent:#ffffff;
   --c-dashboard:#1d4ed8; --c-roster:#0f766e; --c-report:#166534; --c-shifts:#9a3412;
-  --c-employees:#6d28d9; --c-audit:#475569; --c-settings:#be123c;
+  --c-employees:#6d28d9; --c-payments:#b45309; --c-audit:#475569; --c-settings:#be123c;
   --c-dashboard-soft:#dbeafe; --c-roster-soft:#ccfbf1; --c-report-soft:#dcfce7; --c-shifts-soft:#ffedd5;
-  --c-employees-soft:#ede9fe; --c-audit-soft:#e2e8f0; --c-settings-soft:#ffe4e6;
+  --c-employees-soft:#ede9fe; --c-payments-soft:#fef3c7; --c-audit-soft:#e2e8f0; --c-settings-soft:#ffe4e6;
   --t-cafe-bg:#eff8f3; --t-cafe-fg:#1a5c36; --t-bakery-bg:#fce7f3; --t-bakery-fg:#9d174d;
   --t-training-bg:#ede9fe; --t-training-fg:#5b21b6; --t-delivery-bg:#fff3e0; --t-delivery-fg:#b45309;
   --t-bake-bg:#fef9ee; --t-bake-fg:#92400e; --t-bkyc-bg:#fce7f3; --t-bkyc-fg:#9d174d; --t-off-bg:#e8e8e8; --t-off-fg:#666666;
@@ -34,6 +34,7 @@
 #app.admin[data-tab="report"]{--accent:var(--c-report)}
 #app.admin[data-tab="shifts"]{--accent:var(--c-shifts)}
 #app.admin[data-tab="employees"]{--accent:var(--c-employees)}
+#app.admin[data-tab="payments"]{--accent:var(--c-payments)}
 #app.admin[data-tab="audit"]{--accent:var(--c-audit)}
 #app.admin[data-tab="settings"]{--accent:var(--c-settings)}
 #app.admin[data-tab="dashboard"]{--accent-soft:var(--c-dashboard-soft)}
@@ -41,6 +42,7 @@
 #app.admin[data-tab="report"]{--accent-soft:var(--c-report-soft)}
 #app.admin[data-tab="shifts"]{--accent-soft:var(--c-shifts-soft)}
 #app.admin[data-tab="employees"]{--accent-soft:var(--c-employees-soft)}
+#app.admin[data-tab="payments"]{--accent-soft:var(--c-payments-soft)}
 #app.admin[data-tab="audit"]{--accent-soft:var(--c-audit-soft)}
 #app.admin[data-tab="settings"]{--accent-soft:var(--c-settings-soft)}
 #app.admin{min-height:100vh;background:linear-gradient(var(--accent-soft),#fff 320px)}
