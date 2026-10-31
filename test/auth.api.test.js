@@ -75,3 +75,11 @@ test('expired session rows are purged at login', async () => {
   await loginAgent(app);
   assert.equal(db.get('SELECT COUNT(*) n FROM sessions').n, 1);
 });
+
+test('PIN change revokes other admin sessions and keeps the current one', async () => {
+  const { app } = await makeTestApp();
+  const a = await loginAgent(app), b = await loginAgent(app);
+  assert.equal((await a.post('/api/auth/pin').send({ current: '0000', next: '4321' })).status, 200);
+  assert.equal((await b.get('/api/auth/me')).status, 401);
+  assert.equal((await a.get('/api/auth/me')).status, 200);
+});

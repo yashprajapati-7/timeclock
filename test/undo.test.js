@@ -65,7 +65,7 @@ test('conflict: kiosk punch after admin edit → 409, punch kept', async () => {
   assert.deepEqual(res.body, { error: 'Data changed since this action; cannot undo' });
   const after = await state();
   assert.equal(after.shifts[0].out, clock());
-  assert.equal(after.undoLabel, 'Edit shift');
+  assert.equal(after.undoLabel, 'Add employee');     // the conflicting entry is dropped so older ones stay undoable
 });
 
 test('undo restores the new employee fields', async () => {

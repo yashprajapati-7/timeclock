@@ -5,6 +5,7 @@ import { loadData, listAudit, addAudit } from '../repo.js';
 import { buildWeekReport, parseWeekParam } from '../reports/model.js';
 import { payslipsPdf } from '../reports/pdf.js';
 import { money } from '../shared/format.js';
+import { hasPay } from '../shared/pay.js';
 
 const slug = s => String(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'employee';
 
@@ -25,6 +26,7 @@ export function mailRoutes({ db, clock, mailer }){
       for(const row of targets){
         const base = { empId: row.empId, name: row.name };
         if(!row.email){ results.push({ ...base, status: 'skipped', error: 'No email address' }); continue; }
+        if(emp === 'all' && !hasPay(row)){ results.push({ ...base, status: 'skipped', error: 'No pay this week' }); continue; }
         let line;
         try{
           const pdf = await payslipsPdf(rep, [row.empId]);

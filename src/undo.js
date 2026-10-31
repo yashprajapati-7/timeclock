@@ -91,7 +91,9 @@ export function createUndo(db, clock = Date.now){
       }catch(err){
         // e.g. a restored employee code now belongs to someone else (UNIQUE) — still a conflict, not a crash.
         // Only constraint failures (primary result code 19) mean "changed meanwhile"; BUSY/IO errors stay real errors.
-        if(err.code === 'ERR_SQLITE_ERROR' && (err.errcode & 0xff) === 19) throw conflict();
+        // A conflicting entry can never be undone, so drop it: older actions stay undoable.
+        if(err.code === 'ERR_SQLITE_ERROR' && (err.errcode & 0xff) === 19){ stack.pop(); throw conflict(); }
+        if(err instanceof HttpError && err.status === 409) stack.pop();
         throw err;
       }
       stack.pop();

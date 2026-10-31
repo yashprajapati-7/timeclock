@@ -47,3 +47,7 @@ test('rejects roster keys with a bad day and junk rosterImport settings', () => 
   const ok = normalizeBackup({ ...b, v: 3, settings: { ...b.settings, rosterImport: { offsetDays: 1, idMap: { 1: 'e1' } } } });
   assert.deepEqual(ok.settings.rosterImport, { offsetDays: 1, idMap: { 1: 'e1' } });
 });
+
+test('roster key must use the | separator', () => {
+  assert.throws(() => normalizeBackup({ ...fixture('backup-v2'), v: 3, roster: { '2026-10-26#e1': [{ type: 'OFF' }] } }), /roster 2026-10-26#e1/);
+});

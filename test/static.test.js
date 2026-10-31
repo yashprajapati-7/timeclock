@@ -61,3 +61,13 @@ test('app.js is fully on the API', () => {
   assert.ok(kiosk.length > 100);
   assert.doesNotMatch(kiosk, /\/api\/admin/);
 });
+
+test('PINs come from crypto randomness, not Math.random', () => {
+  for(const f of ['src/roster-import.js', 'public/app.js'])
+    assert.doesNotMatch(fs.readFileSync(path.join(ROOT, f), 'utf8'), /Math\.random/, f);
+});
+
+test('tests never write safety copies into the real data/backups folder', () => {
+  assert.ok(!read('src/app.js').includes("backupDir = 'data/backups'"));
+  assert.match(read('test/helpers.js'), /backupDir/);
+});

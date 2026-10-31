@@ -66,3 +66,5 @@ test('roster edits are drafts until "Save roster"; late check can be started fro
   assert.ok(!js.includes('Late check is off.'), 'no instruction text');
   assert.doesNotMatch(js, /rosterPreset: d => saveRosterCell/);
 });
+
+test('email-all confirm counts only staff with pay', () => { has('Pay.hasPay(r)'); });

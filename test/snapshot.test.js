@@ -58,3 +58,10 @@ test('pre-migration snapshot is taken next to the DB and never pruned', async (t
   assert.ok(fs.existsSync(file));
   db.close();
 });
+
+test('snapshot into a folder with a quote in its name', t => {
+  const base = tmp(t), dir = path.join(base, "O'Brien");
+  const db = openDb(path.join(base, 'tc.db')); migrate(db);
+  try{ assert.ok(fs.existsSync(snapshot(db, dir, d(2026, 10, 31)))); }
+  finally{ db.close(); }
+});

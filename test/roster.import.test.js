@@ -98,3 +98,13 @@ test('import fetch: empty or broken body is a 502, not a 500', async () => {
     assert.equal(r.status, 502);
   }
 });
+
+test('imported names are trimmed and a missing name is skipped', () => {
+  const db = memDb();
+  const src = { employees: [{ id: 'x' }, { id: 'y', name: '  Mary   Jane ' }],
+    shifts: { '2026-11-01_x': [{ type: 'OFF' }], '2026-11-01_y': [{ type: 'OFF' }] } };
+  const plan = planImport(src, ctxOf(db));
+  assert.deepEqual(plan.toCreate.map(c => c.name), ['Mary Jane']);
+  assert.ok(plan.skipped.some(k => String(k.key ?? k).endsWith('_x')), JSON.stringify(plan.skipped));
+  assert.ok(!JSON.stringify(plan).includes('undefined'));
+});

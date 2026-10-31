@@ -47,7 +47,7 @@ export function normalizeBackup(json){
   }
   for(const [key, list] of Object.entries(d.roster)){
     const day = key.slice(0, 10);
-    if(!/^d{4}-d{2}-d{2}|.+$/.test(key) || addDaysYmd(day, 0) !== day || !empIds.has(key.slice(11))){ problems.push(`roster ${key}: unknown employee or bad day`); continue; }
+    if(!/^\d{4}-\d{2}-\d{2}\|.+$/.test(key) || addDaysYmd(day, 0) !== day || !empIds.has(key.slice(11))){ problems.push(`roster ${key}: unknown employee or bad day`); continue; }
     try{ d.roster[key] = validateRosterEntries(list); }catch(err){ problems.push(`roster ${key}: ${err.message}`); }
   }
   // Remembered import mapping: keep only a well-formed one.

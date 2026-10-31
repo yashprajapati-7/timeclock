@@ -27,6 +27,7 @@ export function openDb(file){
       depth++;
       try{
         const result = fn();
+        if(result && typeof result.then === 'function') throw new TypeError('db.tx callback must be synchronous');
         raw.exec(name ? `RELEASE ${name}` : 'COMMIT');
         return result;
       }catch(e){
@@ -42,12 +43,25 @@ export function openDb(file){
 export const pendingMigrations = (db, list = migrations) => Math.max(0, list.length - db.get('PRAGMA user_version').user_version);
 
 // Each migration runs in its own transaction (db.tx rolls back on any failing statement).
+// A migration may be { foreignKeysOff: true, sql } for SQLite table rebuilds: foreign keys are switched off
+// BEFORE the transaction (the pragma is a no-op inside one), checked with foreign_key_check before commit,
+// and always switched back on.
 export function migrate(db, list = migrations){
   const current = db.get('PRAGMA user_version').user_version;
   for(let v = current; v < list.length; v++){
-    db.tx(() => {
-      db.exec(list[v]);
+    const m = list[v], sql = m.sql ?? m, step = () => db.tx(() => {
+      db.exec(sql);
+      if(m.foreignKeysOff){
+        const bad = db.all('PRAGMA foreign_key_check');
+        if(bad.length) throw new Error(`Migration ${v + 1} broke a foreign key (${bad[0].table} row ${bad[0].rowid})`);
+      }
       db.exec(`PRAGMA user_version = ${v + 1}`);
     });
+    if(!m.foreignKeysOff){ step(); continue; }
+    db.exec('PRAGMA foreign_keys = OFF');
+    try{
+      if(db.get('PRAGMA foreign_keys').foreign_keys !== 0) throw new Error('Cannot switch foreign keys off (migration run inside a transaction?)');
+      step();
+    }finally{ db.exec('PRAGMA foreign_keys = ON'); }
   }
 }

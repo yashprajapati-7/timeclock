@@ -93,6 +93,24 @@ test('roster PDF: cell labels like the old app, valid PDF, route 200/400/401', a
   assert.equal((await ag.get('/api/admin/export/roster.pdf?week=bad')).status, 400);
 });
 
+test('roster PDF: staff page has no hours; a separate admin overview page lists everyone\'s hours', async () => {
+  const { rosterPdf, rosterOverviewRows } = await import('../src/reports/pdf.js');
+  const { buildRosterWeek } = await import('../src/reports/model.js');
+  const db = memDb();
+  R.createEmployee(db, { id: 'a', name: 'Aka', pin: '1111', active: true }, 0);
+  R.createEmployee(db, { id: 'b', name: 'Bea', pin: '2222', active: true }, 1);
+  R.replaceRosterCell(db, 'a', '2026-10-27', [{ type: 'CAFE', start: '09:00', end: '17:00' }]);
+  R.replaceRosterCell(db, 'a', '2026-10-28', [{ type: 'OFF' }]);
+  R.replaceRosterCell(db, 'b', '2026-10-26', [{ type: 'BAKERY', start: '05:00', end: '09:00' }]);
+  const model = buildRosterWeek(R.loadData(db), d(2026, 10, 26), NOW);
+  const rows = rosterOverviewRows(model);
+  assert.deepEqual(rows[0], ['Aka', '–', '7.0', '–', '–', '–', '–', '–', '7.0', '1']);
+  assert.deepEqual(rows[1], ['Bea', '3.8', '–', '–', '–', '–', '–', '–', '3.8', '0']);
+  assert.deepEqual(rows.at(-1), ['TOTAL', '3.8', '7.0', '–', '–', '–', '–', '–', '10.8', '']);
+  const pdf = (await rosterPdf(model, { compress: false })).toString('latin1');
+  assert.equal(pdf.match(/\/Type \/Page\b(?!s)/g).length, 2);
+});
+
 test('payslip timesheet lists all 7 days: worked, OFF, rostered but absent, nothing', () => {
   const db = memDb();
   R.setSettings(db, { roundFrom: '2026-10-26', breakMode: 'policy' });
@@ -118,4 +136,11 @@ test('payslip has no signature lines; payroll PDF has no instruction footnote', 
   const src = (await import('node:fs')).readFileSync(new URL('../src/reports/pdf.js', import.meta.url), 'utf8');
   assert.ok(!/signature/i.test(src));
   assert.ok(!src.includes('Paid hours = worked'));
+});
+
+test('payslip does not mark today or later rostered days ABSENT', () => {
+  const weekDays = [26, 27, 28, 29, 30, 31].map(n => `2026-10-${n}`).concat('2026-11-01');
+  const report = { weekDays, generatedAt: d(2026, 10, 28, 12) };
+  const r = { roster: Array(7).fill([{ type: 'CAFE', start: '09:00', end: '17:00' }]), shifts: [] };
+  assert.deepEqual(payslipDays(r, report).map(x => x[2]), ['ABSENT', 'ABSENT', '—', '—', '—', '—', '—']);
 });

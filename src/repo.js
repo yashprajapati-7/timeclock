@@ -45,7 +45,7 @@ const toEmp = r => r && {
 };
 const rate = v => v === '' || v == null ? null : Number(v);
 // Column values for the employee fields beyond the original six.
-const extra = e => [e.role ?? '', e.payType === 'salary' ? 'salary' : 'hourly', rate(e.weeklySalary), e.email ?? '', e.phone ?? '',
+const extra = e => [e.role ?? '', ['hourly', 'fixed', 'salary'].includes(e.payType) ? e.payType : 'hourly', rate(e.weeklySalary), e.email ?? '', e.phone ?? '',
   e.birthday || null, e.startDate || null, JSON.stringify(e.fixedItems ?? [])];
 
 export const listEmployees = db => db.all('SELECT * FROM employees ORDER BY created_at, rowid').map(toEmp);
@@ -65,21 +65,22 @@ export const deleteEmployee = (db, id) => db.run('DELETE FROM employees WHERE id
 export const employeeHasShifts = (db, id) => !!db.get('SELECT 1 x FROM shifts WHERE emp_id = ? LIMIT 1', id);
 
 // ----- Shifts & breaks -----
-function attachBreaks(db, rows){
+// Breaks are loaded with one JOIN using the shift query's own WHERE (no "IN (?,?,…)" list, which SQLite caps at 32,766).
+function shiftsWhere(db, where, params, order = ''){
+  const rows = db.all(`SELECT s.* FROM shifts s WHERE ${where}${order}`, params);
   if(!rows.length) return [];
   const byShift = new Map(rows.map(r => [r.id, { id: r.id, empId: r.emp_id, in: r.clock_in, out: r.clock_out, breaks: [], otApproved: !!r.ot_ok }]));
-  const ph = rows.map(() => '?').join(',');
-  for(const b of db.all(`SELECT shift_id, start_at, end_at FROM breaks WHERE shift_id IN (${ph}) ORDER BY start_at`, rows.map(r => r.id)))
+  for(const b of db.all(`SELECT b.shift_id, b.start_at, b.end_at FROM breaks b JOIN shifts s ON s.id = b.shift_id WHERE ${where} ORDER BY b.start_at`, params))
     byShift.get(b.shift_id).breaks.push({ start: b.start_at, end: b.end_at });
   return [...byShift.values()];
 }
-export const getShift = (db, id) => attachBreaks(db, db.all('SELECT * FROM shifts WHERE id = ?', id))[0] ?? null;
+export const getShift = (db, id) => shiftsWhere(db, 's.id = ?', [id])[0] ?? null;
 export function listShifts(db, { from = -Infinity, to = Infinity, empId } = {}){
-  const where = ['clock_in >= ?', 'clock_in < ?'], p = [from === -Infinity ? -8.64e15 : from, to === Infinity ? 8.64e15 : to];
-  if(empId){ where.push('emp_id = ?'); p.push(empId); }
-  return attachBreaks(db, db.all(`SELECT * FROM shifts WHERE ${where.join(' AND ')} ORDER BY clock_in`, p));
+  const where = ['s.clock_in >= ?', 's.clock_in < ?'], p = [from === -Infinity ? -8.64e15 : from, to === Infinity ? 8.64e15 : to];
+  if(empId){ where.push('s.emp_id = ?'); p.push(empId); }
+  return shiftsWhere(db, where.join(' AND '), p, ' ORDER BY s.clock_in');
 }
-export const openShiftFor = (db, empId) => attachBreaks(db, db.all('SELECT * FROM shifts WHERE emp_id = ? AND clock_out IS NULL', empId))[0] ?? null;
+export const openShiftFor = (db, empId) => shiftsWhere(db, 's.emp_id = ? AND s.clock_out IS NULL', [empId])[0] ?? null;
 export function saveShift(db, sh){
   db.tx(() => {
     db.run(`INSERT INTO shifts (id, emp_id, clock_in, clock_out, ot_ok) VALUES (?, ?, ?, ?, ?)

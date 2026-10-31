@@ -4,7 +4,7 @@ import request from 'supertest';
 import { makeTestApp, fixture } from './helpers.js';
 import { importBackup } from '../src/backup.js';
 
-const KEYS = ['company','currency','defaultPin','hasEmployees','kioskIdleSec','onBreak','onShift','theme','tierHours'];
+const KEYS = ['company','currency','hasEmployees','kioskIdleSec','onBreak','onShift','theme','tierHours'];
 const seeded = async () => {
   const t = await makeTestApp();
   await importBackup(t.db, fixture('backup-v2'), { now: t.clock() });

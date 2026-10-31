@@ -37,4 +37,17 @@ export const migrations = [
     CHECK((type IN ('CAFE','BAKERY','TRAINING')) = (start_hm IS NOT NULL AND end_hm IS NOT NULL)));
   CREATE INDEX roster_day_emp ON roster(day, emp_id);
   `,
+  // 3: allow the 'fixed' pay type (one rate for all hours). SQLite can't alter a CHECK, so employees is rebuilt
+  // (create new → copy with rowid → drop old → rename new; foreign keys off so children are untouched).
+  { foreignKeysOff: true, sql: `
+  CREATE TABLE employees_new (id TEXT PRIMARY KEY, name TEXT NOT NULL, pin TEXT NOT NULL UNIQUE CHECK(length(pin)=4),
+    rate1 REAL, rate2 REAL, active INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL,
+    role TEXT NOT NULL DEFAULT '', pay_type TEXT NOT NULL DEFAULT 'hourly' CHECK(pay_type IN ('hourly','fixed','salary')),
+    weekly_salary REAL, email TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', birthday TEXT, start_date TEXT,
+    fixed_items TEXT NOT NULL DEFAULT '[]');
+  INSERT INTO employees_new (rowid, id, name, pin, rate1, rate2, active, created_at, role, pay_type, weekly_salary, email, phone, birthday, start_date, fixed_items)
+    SELECT rowid, id, name, pin, rate1, rate2, active, created_at, role, pay_type, weekly_salary, email, phone, birthday, start_date, fixed_items FROM employees;
+  DROP TABLE employees;
+  ALTER TABLE employees_new RENAME TO employees;
+  ` },
 ];

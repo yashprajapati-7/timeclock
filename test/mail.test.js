@@ -99,3 +99,13 @@ test('503 when email is not set up; 409 while an email-all for that week is runn
   const { default: request } = await import('supertest');
   assert.equal((await request(app).post('/api/admin/payslips/email').send({ week: '2026-10-26' })).status, 401);
 });
+
+test('email all skips staff with no pay that week', async () => {
+  const calls = [];
+  const { a } = await withMail(brevo(calls));
+  await a.post('/api/admin/employees').send({ name: 'Dan', pin: '7777', rate1: 20, email: 'dan@x.co' });
+  const r = await a.post('/api/admin/payslips/email').send({ week: '2026-10-26', emp: 'all' });
+  const dan = r.body.results.find(x => x.name === 'Dan');
+  assert.deepEqual([dan.status, dan.error], ['skipped', 'No pay this week']);
+  assert.ok(!calls.some(c => c.body.to?.[0]?.email === 'dan@x.co'));
+});

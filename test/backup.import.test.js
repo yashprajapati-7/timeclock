@@ -75,3 +75,16 @@ test('older backups import with no roster and rounding not in effect', async () 
   assert.deepEqual(loadData(db).roster, {});
   assert.equal(getSettings(db).roundFrom, null);
 });
+
+test('fixed pay type survives a backup round trip and pays rate1 for every hour', async () => {
+  const { createEmployee, saveShift } = await import('../src/repo.js');
+  const src = memDb();
+  createEmployee(src, { id: 'f1', name: 'Fi', pin: '5555', rate1: 25, rate2: 99, payType: 'fixed', active: true }, 0);
+  for(let i = 0; i < 4; i++) saveShift(src, { id: `s${i}`, empId: 'f1', in: d(2026, 10, 26 + i, 8), out: d(2026, 10, 26 + i, 16), breaks: [] });
+  const dst = memDb();
+  await importBackup(dst, JSON.parse(JSON.stringify(exportBackup(src))));
+  assert.equal(listEmployees(dst)[0].payType, 'fixed');
+  const [r] = week(loadData(dst), new Date(d(2026, 10, 26)));
+  assert.ok(r.paid > 24);
+  assert.ok(Math.abs(r.gross - r.paid * 25) < 1e-9);
+});

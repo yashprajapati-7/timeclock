@@ -1,7 +1,7 @@
 // Pure break & pay calculation shared by the browser (/shared/pay.js) and the server.
 // `data` is always { settings, employees, shifts, adj, roster? } in the legacy shape.
 // Roster rules: raw punches are never changed; *paid* in/out times are derived from the roster at calculation time.
-import { H, MIN, num, ymd, addDays, dayIndex, fmtHM, fmtDay, atLocal, addDaysYmd, floorMin, ceilStep, floorStep } from './format.js';
+import { MIN, num, ymd, addDays, dayIndex, atLocal, addDaysYmd, floorMin, ceilStep, floorStep } from './format.js';
 
 export const TIMED = ['CAFE', 'BAKERY', 'TRAINING'];
 export const MATCH_EARLY_MIN = 120;
@@ -25,6 +25,8 @@ const roundingFrom = st => st.rounding === false || !st.roundFrom ? null : atLoc
 // Map(shiftId → {entry, day, S, E, first, last}) for one employee's shifts.
 // A shift matches the timed entry (that day, the day before or after) whose start is nearest its clock-in,
 // within S−120 min ≤ in < E; an entry on the clock-in's own day also matches any earlier clock-in (paid from S).
+// A finished shift that ended at or before S never matches: it is paid actual time. (An open shift before S
+// stays matched and earns nothing until S.)
 // Several shifts inside one entry form a chain: the first gets the start rule, the last the finish rule.
 export function matchRoster(empShifts, roster = {}, empId, st){
   const out = new Map(), from = roundingFrom(st);
@@ -38,6 +40,7 @@ export function matchRoster(empShifts, roster = {}, empId, st){
       for(const entry of roster[`${dd}|${empId}`] || []){
         if(!TIMED.includes(entry.type) || !entry.start || !entry.end) continue;
         const { S, E } = rosterSpan(entry, dd);
+        if(sh.out != null && sh.out <= S) continue;   // finished before the rostered start: actual time, no rounding
         if(S - MATCH_EARLY_MIN * MIN <= sh.in && sh.in < E){
           const dist = Math.abs(S - sh.in);
           if(!best || dist < best.dist || (dist === best.dist && S < best.S)) best = { entry, day: dd, S, E, dist };
@@ -78,7 +81,7 @@ export function paidSpan(sh, match, st, now = Date.now()){
     else if(outM > E + g){
       // Overtime is paid (down to the quarter hour, never below the rostered finish) and flagged.
       res.paidOut = Math.max(E, floorStep(outM, step));
-      res.overMin = Math.round((outM - E) / MIN);
+      res.overMin = res.paidOut > E ? Math.round((outM - E) / MIN) : 0;   // flag only when overtime is actually paid
     } else if(sh.out != null){
       res.paidOut = floorStep(outM, step);
       res.earlyMin = Math.round((E - outM) / MIN);
@@ -149,6 +152,9 @@ export function week(data, ws, now = Date.now()){
   return rows;
 }
 
+// A week row worth a payslip: hours, a salary, or an allowance/deduction.
+export const hasPay = r => r.paid > 0 || (r.salary ?? 0) > 0 || r.allow > 0 || r.deduct > 0;
+
 export function totals(rows){
   const keys = ['total','ded','paid','h1','h2','p1','p2','gross','allow','deduct','net'];
   const T = Object.fromEntries(keys.map(k => [k, 0])); T.days = Array(7).fill(0);
@@ -198,46 +204,4 @@ export function rosterWeek(data, ws){
       offDays: cells.filter(c => c.some(x => x.type === 'OFF')).length });
   }
   return { days, rows, staffPerDay, total: rows.reduce((acc, r) => acc + r.total, 0) };
-}
-
-// Things an admin should look at: forgotten clock-outs, long breaks, overlaps, missing rates, unpaid overtime.
-export function anomalies(data, ws, now = Date.now()){
-  const out = [], maxH = num(data.settings.maxShiftHours) || 14;
-  const name = id => data.employees.find(e => e.id === id)?.name ?? '(deleted)';
-  const openBreak = sh => sh.breaks.find(b => b.end == null);
-  if(data.settings.defaultPin) out.push({ level:'high', msg:'Admin PIN is still the default (0000). Change it in Settings.', tab:'settings' });
-  for(const sh of data.shifts){
-    if(sh.out == null && now - sh.in > maxH * H)
-      out.push({ level:'high', msg:`${name(sh.empId)} has been clocked in for ${fmtHM((now - sh.in) / H)}. Missed clock-out?`, shiftId: sh.id });
-    const b = openBreak(sh);
-    if(b && now - b.start > 2 * H)
-      out.push({ level:'med', msg:`${name(sh.empId)} has been on break for ${fmtHM((now - b.start) / H)}.`, shiftId: sh.id });
-  }
-  const a = +ws, b = +addDays(ws, 7), byEmp = {};
-  for(const sh of data.shifts) if(sh.in >= a && sh.in < b) (byEmp[sh.empId] ||= []).push(sh);
-  for(const list of Object.values(byEmp)){
-    list.sort((x, y) => x.in - y.in);
-    for(let i = 1; i < list.length; i++)
-      if((list[i - 1].out ?? Infinity) > list[i].in)
-        out.push({ level:'high', msg:`${name(list[i].empId)}: overlapping shifts on ${fmtDay(list[i].in)}.`, shiftId: list[i].id });
-  }
-  // Roster-related: unpaid overtime, and clock-ins on a rostered day that match no rostered entry.
-  const from = roundingFrom(data.settings);
-  if(from != null){
-    const calcs = calcAll(data, now, { from: a, to: b });
-    for(const sh of data.shifts){
-      const c = calcs.get(sh.id);
-      if(!c) continue;
-      const rostered = ((data.roster || {})[`${ymd(sh.in)}|${sh.empId}`] || []).some(x => TIMED.includes(x.type));
-      if(!c.roster && rostered && sh.in >= from)
-        out.push({ level:'med', msg:`${name(sh.empId)} clocked in outside their rostered time on ${fmtDay(sh.in)}.`, shiftId: sh.id });
-    }
-  }
-  for(const e of data.employees){
-    if(e.active === false) continue;
-    if(e.payType === 'salary'){
-      if(e.weeklySalary == null || e.weeklySalary === '') out.push({ level:'low', msg:`${e.name} is salaried but has no weekly salary set.`, empId: e.id });
-    } else if(e.rate1 === '' || e.rate1 == null) out.push({ level:'low', msg:`${e.name} has no pay rate set.`, empId: e.id });
-  }
-  return out;
 }

@@ -132,3 +132,14 @@ test('fixed rate pays one rate for every hour, before and after the tier', () =>
   assert.equal(r.r2, 25);
   assert.ok(Math.abs(r.gross - r.paid * 25) < 1e-9);
 });
+
+test('hasPay: only rows with hours, salary or adjustments', async () => {
+  const { hasPay } = await import('../src/shared/pay.js');
+  assert.equal(hasPay({ paid: 0, salary: null, allow: 0, deduct: 0 }), false);
+  for(const r of [{ paid: 0.5 }, { salary: 900 }, { allow: 20 }, { deduct: 5 }])
+    assert.equal(hasPay({ paid: 0, salary: null, allow: 0, deduct: 0, ...r }), true);
+});
+
+test('anomalies() is gone (the alerts panel was removed)', async () => {
+  assert.equal('anomalies' in await import('../src/shared/pay.js'), false);
+});

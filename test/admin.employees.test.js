@@ -46,9 +46,7 @@ test('state carries roster, timezone and mail status; deleting an employee remov
   const { app, db } = await makeTestApp();
   const a = await loginAgent(app);
   const s = (await a.get('/api/admin/state')).body;
-  assert.deepEqual(Object.keys(s).sort(), ['adj', 'employees', 'mailConfigured', 'roster', 'settings', 'shifts', 'tz', 'undoLabel']);
-  assert.equal(typeof s.tz.name, 'string');
-  assert.equal(typeof s.tz.offsetMin, 'number');
+  assert.deepEqual(Object.keys(s).sort(), ['adj', 'employees', 'mailConfigured', 'roster', 'settings', 'shifts', 'undoLabel']);
   assert.equal(s.mailConfigured, false);
   const id = (await a.post('/api/admin/employees').send({ name: 'Ann', pin: '1111' })).body.id;
   db.run("INSERT INTO roster (emp_id, day, type, position) VALUES (?, '2026-10-26', 'OFF', 0)", id);
@@ -56,4 +54,20 @@ test('state carries roster, timezone and mail status; deleting an employee remov
   assert.equal(db.get('SELECT COUNT(*) n FROM roster').n, 0);
   await a.post('/api/admin/undo').type('json');
   assert.equal(db.get('SELECT COUNT(*) n FROM roster').n, 1);
+});
+
+test('fixed pay type is stored and returned (and undo restores it)', async () => {
+  const { app } = await makeTestApp();
+  const a = await loginAgent(app);
+  const id = (await a.post('/api/admin/employees').send({ name: 'Fi', pin: '5555', payType: 'fixed', rate1: 25 })).body.id;
+  const emp = async () => (await a.get('/api/admin/state')).body.employees.find(e => e.id === id);
+  assert.equal((await emp()).payType, 'fixed');
+  let body = { ...(await emp()), payType: 'hourly', rate2: 30 };
+  await a.put(`/api/admin/employees/${id}`).send(body);
+  assert.equal((await emp()).payType, 'hourly');
+  body = { ...(await emp()), payType: 'fixed' };
+  await a.put(`/api/admin/employees/${id}`).send(body);
+  assert.equal((await emp()).payType, 'fixed');
+  await a.post('/api/admin/undo').type('json');
+  assert.equal((await emp()).payType, 'hourly');
 });

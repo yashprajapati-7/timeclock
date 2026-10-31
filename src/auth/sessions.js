@@ -21,7 +21,8 @@ export function touchSession(db, token, now, timeoutMin){
 }
 
 export const destroySession = (db, token) => db.run('DELETE FROM sessions WHERE token_hash = ?', tokenHash(token));
-export const destroyAllSessions = db => db.run('DELETE FROM sessions');
+export const destroyAllSessions = (db, { except } = {}) =>
+  except ? db.run('DELETE FROM sessions WHERE token_hash <> ?', except) : db.run('DELETE FROM sessions');
 export const purgeExpiredSessions = (db, now, timeoutMin) => db.run('DELETE FROM sessions WHERE last_seen < ?', now - timeoutMin * 60000);
 
 export function parseCookies(header){

@@ -14,7 +14,7 @@ export function kioskRoutes({ db, clock, lockouts }){
     const onBreak = open.filter(s => s.onBreak).length;
     res.json({
       company: st.company, theme: st.theme, currency: st.currency, tierHours: st.tierHours, kioskIdleSec: st.kioskIdleSec,
-      hasEmployees: !!db.get('SELECT 1 x FROM employees LIMIT 1'), defaultPin: st.defaultPin,
+      hasEmployees: !!db.get('SELECT 1 x FROM employees LIMIT 1'),
       onShift: open.length - onBreak, onBreak,
     });
   });

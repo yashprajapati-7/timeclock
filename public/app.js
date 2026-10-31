@@ -848,7 +848,7 @@ const Actions = {
   },
   emailAll: async (d, el) => {
     const week = ymd(ui.weekStart);
-    const rows = Pay.week(db(), ui.weekStart), withEmail = rows.filter(r => r.e.email).length;
+    const rows = Pay.week(db(), ui.weekStart), withEmail = rows.filter(r => r.e.email && Pay.hasPay(r)).length;
     const st = await api.get(`/api/admin/payslips/email-status?week=${week}`).catch(() => ({}));
     const last = st.lastSent ? ` Payslips for this week were last emailed ${fmtStamp(st.lastSent)}.` : '';
     if(!await Modal.confirm(`Email payslips for the week of ${fmtDay(ui.weekStart)} to ${withEmail} employee(s) with an email address?${last}`, { title: 'Email all payslips', ok: 'Send all' })) return;
@@ -997,7 +997,7 @@ const Actions = {
   suggestPin: () => {
     const used = new Set(db().employees.map(e => e.pin));
     if(used.size >= 10000) return Toast.show('No free codes left');
-    let p; do p = String(Math.floor(Math.random() * 10000)).padStart(4, '0'); while(used.has(p));
+    let p; do p = String(crypto.getRandomValues(new Uint32Array(1))[0] % 10000).padStart(4, '0'); while(used.has(p));
     $('#ePin').value = p;
   },
   // Quick CSV exports built in the browser from the same numbers; Excel/PDF come from the server.

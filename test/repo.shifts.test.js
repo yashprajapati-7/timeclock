@@ -57,3 +57,18 @@ test('otApproved persists and defaults false', () => {
   R.saveShift(db, { id: 'a', empId: 'e1', in: 100, out: 200, breaks: [], otApproved: true });
   assert.equal(R.getShift(db, 'a').otApproved, true);
 });
+
+test('loadData handles more than 32,766 shifts', () => {
+  const db = seed(), N = 33000;
+  db.tx(() => {
+    const ins = db.raw.prepare('INSERT INTO shifts (id, emp_id, clock_in, clock_out) VALUES (?, ?, ?, ?)');
+    for(let i = 0; i < N; i++) ins.run(`s${i}`, 'e1', i * 1000, i * 1000 + 500);
+    db.run('INSERT INTO breaks (shift_id, start_at, end_at) VALUES (?, ?, ?)', ['s0', 100, 200]);
+    db.run('INSERT INTO breaks (shift_id, start_at, end_at) VALUES (?, ?, ?)', [`s${N - 1}`, (N - 1) * 1000 + 100, null]);
+  });
+  const shifts = R.loadData(db).shifts;
+  assert.equal(shifts.length, N);
+  assert.deepEqual(shifts.find(s => s.id === 's0').breaks, [{ start: 100, end: 200 }]);
+  assert.deepEqual(shifts.find(s => s.id === `s${N - 1}`).breaks, [{ start: (N - 1) * 1000 + 100, end: null }]);
+  assert.equal(shifts.find(s => s.id === 's1').breaks.length, 0);
+});

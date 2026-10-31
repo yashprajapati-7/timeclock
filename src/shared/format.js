@@ -68,7 +68,7 @@ export function rosterLabel(e){
   return { CAFE: span, BAKERY: `Bakery ${span}`, TRAINING: `TRN ${span}`, DELIVERY: 'DEL', BAKE: 'BAKE', 'BAKERY YC': 'BKY YC', OFF: 'OFF' }[e.type] ?? e.type;
 }
 
-// Prefix text that a spreadsheet would treat as a formula; numbers like "-5" are left alone.
-export const safeText = v => { v = String(v ?? ''); return /^[=+\-@]/.test(v) && !/^-?\d/.test(v) ? "'" + v : v; };
+// Spreadsheet-safe text: anything that could start a formula gets a leading ' (plain numbers like -5 stay as they are).
+export const safeText = v => { v = String(v ?? ''); return /^[=+\-@\t\r]/.test(v) && !/^-?\d+(\.\d+)?$/.test(v) ? "'" + v : v; };
 export const csvCell = v => `"${safeText(v).replace(/"/g, '""')}"`;
 export const csvBuild = rows => '﻿' + rows.map(r => r.map(csvCell).join(',')).join('\r\n');

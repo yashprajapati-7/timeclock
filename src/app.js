@@ -20,12 +20,12 @@ function requireJson(req, res, next){
   next();
 }
 
-export function createApp({ db, clock = Date.now, trustProxy = false, mailer = null, fetch: fetchImpl = globalThis.fetch, rosterImportUrl }){
+export function createApp({ db, clock = Date.now, trustProxy = false, mailer = null, fetch: fetchImpl = globalThis.fetch, rosterImportUrl, backupDir = path.join(ROOT, 'data', 'backups') }){
   const ctx = {
     db, clock,
     lockouts: { admin: createLockout({ max: 5, ms: 60000, clock }), kiosk: createLockout({ max: 5, ms: 30000, clock }) },
     undo: createUndo(db, clock),
-    mailer, fetch: fetchImpl, rosterImportUrl,
+    mailer, fetch: fetchImpl, rosterImportUrl, backupDir,
   };
   const app = express();
   app.disable('x-powered-by');
@@ -35,10 +35,12 @@ export function createApp({ db, clock = Date.now, trustProxy = false, mailer = n
     res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin' });
     next();
   });
-  app.use('/api', requireJson, express.json({ limit: '10mb' }));
+  app.use('/api', requireJson);
+  // Public endpoints only ever need a PIN; admin bodies (backups grow with the audit trail) are read after sign-in.
+  app.use(['/api/auth', '/api/kiosk'], express.json({ limit: '16kb' }));
   app.use('/api/auth', authRoutes(ctx));
   app.use('/api/kiosk', kioskRoutes(ctx));
-  app.use('/api/admin', requireAdmin(ctx));
+  app.use('/api/admin', requireAdmin(ctx), express.json({ limit: '25mb' }));
   app.use('/api/admin/export', exportRoutes(ctx));
   app.use('/api/admin/roster', rosterRoutes(ctx));
   app.use('/api/admin/payslips', mailRoutes(ctx));

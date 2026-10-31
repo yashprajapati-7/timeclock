@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { HttpError, ValidationError } from '../errors.js';
 import { getSettings, setSettings, addAudit } from '../repo.js';
 import { hashPin, verifyPin, needsRehash } from '../auth/hash.js';
-import { COOKIE, createSession, touchSession, destroySession, purgeExpiredSessions, parseCookies } from '../auth/sessions.js';
+import { COOKIE, createSession, touchSession, destroySession, destroyAllSessions, purgeExpiredSessions, parseCookies } from '../auth/sessions.js';
 
 // First start (or after erase): admin PIN 0000, flagged so the dashboard nags until it is changed.
 export async function ensureAdminPin(db, now = Date.now()){
@@ -72,6 +72,7 @@ export function authRoutes(ctx){
     if(!await verifyPin(current, getSettings(db).adminPinHash)) throw new ValidationError('Current PIN is wrong');
     if(next.length < 4) throw new ValidationError('New PIN must be at least 4 characters');
     setSettings(db, { adminPinHash: await hashPin(next), defaultPin: false });
+    destroyAllSessions(db, { except: req.session.key });     // anyone signed in with the old PIN is signed out
     audit('Admin', 'Admin PIN changed');
     res.json({ ok: true });
   });

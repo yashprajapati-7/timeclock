@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { d } from './helpers.js';
-import { matchRoster, paidSpan, shift, calcAll, rosterSpan, rosterWeek, anomalies } from '../src/shared/pay.js';
+import { matchRoster, paidSpan, shift, calcAll, rosterSpan, rosterWeek } from '../src/shared/pay.js';
 import { atLocal } from '../src/shared/format.js';
 
 const DAY = '2026-10-27';
@@ -139,15 +139,6 @@ test('rosterWeek hours use break rules; OFF counted', () => {
   assert.equal(w.total, 13);
 });
 
-test('anomalies: salaried without a salary (overtime is paid, not an anomaly)', () => {
-  const data = { settings: { ...ST, maxShiftHours: 14 }, adj: {}, roster: roster(DAY, cafe('09:00', '17:00')),
-    employees: [{ id: 'e1', name: 'Ann', rate1: 20, active: true, payType: 'hourly' }, { id: 'e2', name: 'Sal', rate1: null, active: true, payType: 'salary', weeklySalary: null }],
-    shifts: [sh('ot', t(9), t(17, 40))] };
-  const a = anomalies(data, new Date(2026, 9, 26), t(20));
-  assert.ok(!a.some(x => x.shiftId === 'ot'));
-  assert.ok(a.some(x => x.empId === 'e2' && /salar/i.test(x.msg)));
-});
-
 test('match: a clock-in inside one entry is never stolen by a later entry that day', () => {
   const split = roster(DAY, cafe('09:00', '13:00'), cafe('15:00', '19:00'));
   const ms = matchRoster([sh('a', t(9), t(12)), sh('b', t(12, 30), t(13)), sh('c', t(15), t(19))], split, 'e1', ST);
@@ -162,4 +153,40 @@ test('overtime never pays less than the rostered finish', () => {
   const r = roster(DAY, cafe('09:00', '17:50'));
   assert.equal(paid(t(9), t(17, 57), {}, r).paidOut, t(17, 50));
   assert.equal(paid(t(9), t(18, 20), {}, r).paidOut, t(18, 15));
+});
+
+test('a shift that ends before the rostered start is paid actual time (not matched)', () => {
+  const late = roster(DAY, cafe('14:00', '20:00'));
+  const m = sh('m', t(8), t(12));
+  assert.equal(match1(m, late), undefined);
+  const c = shift(m, ST, t(21), undefined);
+  assert.deepEqual([c.paidIn, c.paidOut, c.paid], [t(8), t(12), 3.75]);
+  const r9 = roster(DAY, cafe('09:00', '17:00'));
+  assert.equal(match1(sh('e', t(7), t(8, 55)), r9), undefined);
+  assert.equal(match1(sh('f', t(7), t(9)), r9), undefined);       // ends exactly at the start
+  assert.ok(match1(sh('g', t(7), t(9, 30)), r9));
+});
+
+test('chain: an unmatched morning shift does not steal the start rule', () => {
+  const r = roster(DAY, cafe('14:00', '20:00'));
+  const ms = matchRoster([sh('m', t(8), t(12)), sh('a', t(13, 56), t(20))], r, 'e1', ST);
+  assert.equal(ms.get('m'), undefined);
+  assert.deepEqual([ms.get('a').first, ms.get('a').last], [true, true]);
+  const data = { settings: ST, employees: [{ id: 'e1', name: 'Ann' }], adj: {}, roster: r,
+    shifts: [sh('m', t(8), t(12)), sh('a', t(13, 56), t(20))] };
+  assert.equal(calcAll(data, t(21)).get('a').paidIn, t(14));
+});
+
+test('an early clock-in stays matched (not UNROSTERED) and earns nothing until the rostered start', () => {
+  const r = roster(DAY, cafe('09:00', '17:00')), s = sh('o', t(8, 50), null);
+  const m = matchRoster([s], r, 'e1', ST).get('o');
+  assert.equal(m.first, true);
+  assert.equal(shift(s, ST, t(8, 55), m).paid, 0);
+  assert.equal(matchRoster([s], r, 'e1', ST).get('o').first, true);
+});
+
+test('overtime flag only when overtime is paid', () => {
+  const ten = paid(t(9), t(17, 10));
+  assert.deepEqual([ten.paidOut, ten.overMin], [t(17), 0]);
+  assert.equal(paid(t(9), t(17, 25)).overMin, 25);
 });

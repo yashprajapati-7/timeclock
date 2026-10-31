@@ -2,7 +2,7 @@
 import PDFDocument from 'pdfkit';
 import { createRequire } from 'node:module';
 import { HttpError } from '../errors.js';
-import { DAYS, fmtHM, fmtMin, hm, money, rosterLabel } from '../shared/format.js';
+import { DAYS, fmtHM, fmtMin, hm, money, rosterLabel, ymd } from '../shared/format.js';
 export { rosterLabel };
 
 const require = createRequire(import.meta.url);
@@ -121,7 +121,8 @@ export function payslipDays(r, report){
     const planned = entries.map(rosterLabel).join(', ') || '—', shifts = r.shifts.filter(s => s.date === day);
     if(shifts.length) return shifts.map(s => [name, planned, ...timesheetRow(s).slice(1)]);
     const off = entries.length && entries.every(e => e.type === 'OFF'), timed = entries.some(e => e.start);
-    return [[name, planned, off ? 'OFF' : timed ? 'ABSENT' : '—', '', '', '', '', '', '']];
+    const future = day >= ymd(report.generatedAt);         // not over yet: not an absence
+    return [[name, planned, off ? 'OFF' : timed && !future ? 'ABSENT' : '—', '', '', '', '', '', '']];
   });
 }
 
@@ -171,16 +172,25 @@ const ROSTER_COLORS = {
   TRAINING: ['#EDE9FE', '#5B21B6'], DELIVERY: ['#FFF3E0', '#B45309'], BAKE: ['#FEF9EE', '#92400E'], OFF: ['#E8E8E8', '#555555'],
 };
 
+// Admin-only overview page: rostered hours per day, week total and days off for each staff member.
+const hrs = h => h ? h.toFixed(1) : '–';
+export function rosterOverviewRows(model){
+  return [
+    ...model.rows.map(r => [r.name, ...r.days.map(hrs), hrs(r.total), String(r.offDays)]),
+    ['TOTAL', ...model.days.map((_, i) => hrs(model.rows.reduce((a, r) => a + r.days[i], 0))), hrs(model.total), ''],
+  ];
+}
+
+// The roster page is for posting up, so it shows no hours; everyone's hours are on the overview page after it.
 export function rosterPdf(model, opts = {}){
   const doc = newDoc(`Roster ${model.weekStart}`, { ...opts, layout: 'landscape' });
   header(doc, { ...model, weekStart: model.weekStart, weekEnd: model.weekEnd }, 'Roster');
-  const x0 = doc.page.margins.left, nameW = 110, hoursW = 50;
-  const dayW = (doc.page.width - x0 * 2 - nameW - hoursW) / 7, headH = 22, bottom = () => doc.page.height - doc.page.margins.bottom;
+  const x0 = doc.page.margins.left, nameW = 110;
+  const dayW = (doc.page.width - x0 * 2 - nameW) / 7, headH = 22, bottom = () => doc.page.height - doc.page.margins.bottom;
   const drawHead = y => {
-    doc.rect(x0, y, nameW + dayW * 7 + hoursW, headH).fill('#000');
+    doc.rect(x0, y, nameW + dayW * 7, headH).fill('#000');
     doc.font('Mono-Bold').fontSize(8).fillColor('#fff').text('STAFF', x0 + 4, y + 7, { width: nameW - 8, lineBreak: false });
     model.days.forEach((dd, i) => doc.text(`${DAYS[i]} ${dd.slice(8)}/${dd.slice(5, 7)}`, x0 + nameW + dayW * i, y + 7, { width: dayW, align: 'center', lineBreak: false }));
-    doc.text('HRS', x0 + nameW + dayW * 7, y + 7, { width: hoursW - 4, align: 'right', lineBreak: false });
     doc.fillColor('#000');
     return y + headH;
   };
@@ -201,13 +211,21 @@ export function rosterPdf(model, opts = {}){
         doc.restore();
       });
     });
-    doc.font('Mono').fontSize(8).fillColor('#000').text(r.total ? r.total.toFixed(1) : '–', x0 + nameW + dayW * 7, y + 5, { width: hoursW - 4, align: 'right', lineBreak: false });
-    doc.moveTo(x0, y + rowH).lineTo(x0 + nameW + dayW * 7 + hoursW, y + rowH).lineWidth(0.4).strokeColor('#000').stroke();
+    doc.moveTo(x0, y + rowH).lineTo(x0 + nameW + dayW * 7, y + rowH).lineWidth(0.4).strokeColor('#000').stroke();
     y += rowH;
   }
   if(y + 16 > bottom()){ doc.addPage(); y = doc.page.margins.top; }
   doc.font('Mono-Bold').fontSize(8).fillColor('#000').text('STAFF ON', x0 + 4, y + 5, { width: nameW, lineBreak: false });
   model.staffPerDay.forEach((n, i) => doc.text(String(n), x0 + nameW + dayW * i, y + 5, { width: dayW, align: 'center', lineBreak: false }));
-  doc.text(model.total.toFixed(1), x0 + nameW + dayW * 7, y + 5, { width: hoursW - 4, align: 'right', lineBreak: false });
+
+  doc.addPage();
+  header(doc, model, 'Roster overview', 'admin only');
+  const ovDayW = 64, rows = rosterOverviewRows(model);
+  table(doc, [
+    { label: 'Staff', width: 192 }, ...model.days.map((dd, i) => ({ label: `${DAYS[i]} ${dd.slice(8)}/${dd.slice(5, 7)}`, width: ovDayW, align: 'right' })),
+    { label: 'Total hrs', width: 70, align: 'right' }, { label: 'Days off', width: 60, align: 'right' },
+  ], rows, { fontSize: 9, bold: new Set([rows.length - 1]) });
+  doc.font('Mono').fontSize(8).fillColor('#555')
+    .text('Hours are rostered hours after the unpaid-break rules, not clocked hours.', doc.page.margins.left, doc.y);
   return finish(doc);
 }

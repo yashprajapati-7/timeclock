@@ -5,6 +5,7 @@ import { createApp } from './app.js';
 import { ensureAdminPin } from './routes/auth.js';
 import { snapshot, snapshotBeforeMigrate, prune } from './snapshot.js';
 import { addAudit } from './repo.js';
+import { gracefulShutdown } from './shutdown.js';
 import { createMailer } from './mail.js';
 
 const config = loadConfig();
@@ -26,11 +27,11 @@ function backupNow(){
 backupNow();
 setInterval(backupNow, 24 * 3600 * 1000).unref();
 
-const server = createApp({ db, trustProxy: config.trustProxy, rosterImportUrl: config.rosterImportUrl, mailer: createMailer(process.env) }).listen(config.port, config.host, () => {
+const server = createApp({ db, trustProxy: config.trustProxy, rosterImportUrl: config.rosterImportUrl, backupDir: config.backupDir, mailer: createMailer(process.env) }).listen(config.port, config.host, () => {
   console.log(`Time Clock running at http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}`);
   console.log(`Database: ${config.dbPath}`);
 });
 
-const shutdown = () => { server.close(() => { db.close(); process.exit(0); }); };
+const shutdown = gracefulShutdown({ server, db });
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);

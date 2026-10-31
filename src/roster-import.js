@@ -1,7 +1,7 @@
 // One-time (re-runnable) import from the old GJ06 roster app's JSON: {employees:[{id,name,role}], shifts:{'YYYY-MM-DD_<id>': entry|entry[]}}.
 // The old app keyed days with toISOString() (UTC), so east of UTC every key is one day early → default offset +1.
 // The offset and the source-id → employee map are remembered in settings.rosterImport, so re-runs are idempotent.
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import * as R from './repo.js';
 import { validateRosterEntries } from './validate.js';
 import { calcAll } from './shared/pay.js';
@@ -43,12 +43,14 @@ export function planImport(src, ctx, { offsetDays } = {}){
 
   const target = new Map(), matched = [], toCreate = [], ambiguous = [];
   for(const s of src.employees){
+    const nm = String(s?.name ?? '').trim().replace(/\s+/g, ' ');
+    if(!nm) continue;                       // no name: its cells end up in "skipped"
     const mapped = idMap[s.id] && ctx.employees.find(e => e.id === idMap[s.id]);
     const same = byName.get(norm(s.name)) || [];
     if(mapped){ matched.push({ srcId: s.id, srcName: s.name, empId: mapped.id }); target.set(String(s.id), { empId: mapped.id, name: mapped.name }); }
     else if(same.length === 1){ matched.push({ srcId: s.id, srcName: s.name, empId: same[0].id }); target.set(String(s.id), { empId: same[0].id, name: same[0].name }); }
-    else if(same.length > 1) ambiguous.push(s.name);
-    else { target.set(String(s.id), { newIndex: toCreate.length, name: String(s.name).trim() }); toCreate.push({ srcId: s.id, name: String(s.name).trim(), role: String(s.role ?? '').trim() }); }
+    else if(same.length > 1) ambiguous.push(nm);
+    else { target.set(String(s.id), { newIndex: toCreate.length, name: nm }); toCreate.push({ srcId: s.id, name: nm, role: String(s.role ?? '').trim() }); }
   }
 
   const today = ymd(ctx.now), cells = [], skipped = [];
@@ -85,7 +87,7 @@ export function planImport(src, ctx, { offsetDays } = {}){
 
 // Writes a plan inside the caller's transaction. touch(table, id, opts) registers rows with undo.
 export function applyImport(db, plan, { now = Date.now(), pinGen, touch = () => {} } = {}){
-  const randomPin = pinGen ?? (() => String(Math.floor(Math.random() * 10000)).padStart(4, '0'));
+  const randomPin = pinGen ?? (() => String(randomInt(10000)).padStart(4, '0'));
   const used = new Set(R.listEmployees(db).map(e => e.pin));
   const created = [], newIds = [];
   for(const c of plan.toCreate){

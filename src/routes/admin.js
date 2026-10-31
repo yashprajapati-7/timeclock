@@ -6,8 +6,9 @@ import { validatePin, validateEmployee, validateShift, validateSettings, validat
 import { normalizeBackup, importBackup, exportBackup } from '../backup.js';
 import { ensureAdminPin } from './auth.js';
 import { clamp, fmtDay, hm, money, ymd } from '../shared/format.js';
+import { snapshotBefore } from '../snapshot.js';
 
-export function adminRoutes({ db, clock, undo, mailer }){
+export function adminRoutes({ db, clock, undo, mailer, backupDir }){
   const r = Router();
   const audit = (action, detail = '') => R.addAudit(db, { ts: clock(), actor: 'Admin', action, detail });
   const mustGet = (getter, id, what) => { const x = getter(db, id); if(!x) throw new HttpError(404, `${what} not found`); return x; };
@@ -22,8 +23,6 @@ export function adminRoutes({ db, clock, undo, mailer }){
   r.get('/state', (req, res) => {
     res.json({ settings: R.publicSettings(db), employees: R.listEmployees(db), shifts: R.listShifts(db),
       adj: R.listAdjustments(db), roster: R.listRoster(db), undoLabel: undo.label(req.session.key),
-      // The browser compares this with its own offset (days/weeks are server-local time).
-      tz: { name: Intl.DateTimeFormat().resolvedOptions().timeZone, offsetMin: -new Date(clock()).getTimezoneOffset() },
       mailConfigured: !!mailer?.configured });
   });
 
@@ -161,6 +160,7 @@ export function adminRoutes({ db, clock, undo, mailer }){
 
   r.post('/import', async (req, res) => {
     normalizeBackup(req.body);                     // 422 before touching anything
+    snapshotBefore(db, backupDir, 'import', clock());   // a failed safety copy stops the import (500)
     const counts = await importBackup(db, req.body, { now: clock() });
     // importBackup clears sessions; keep the importing admin signed in.
     db.run('INSERT INTO sessions (token_hash, created_at, last_seen) VALUES (?, ?, ?)', [req.session.key, clock(), clock()]);
@@ -170,6 +170,7 @@ export function adminRoutes({ db, clock, undo, mailer }){
 
   r.post('/erase', async (req, res) => {
     if(req.body?.confirm !== 'ERASE') throw new ValidationError('Type ERASE to confirm');
+    snapshotBefore(db, backupDir, 'erase', clock());
     db.tx(() => {
       for(const t of ['breaks', 'adjustments', 'roster', 'shifts', 'employees', 'settings', 'audit']) db.run(`DELETE FROM ${t}`);
     });

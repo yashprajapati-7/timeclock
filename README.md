@@ -49,7 +49,7 @@ You can also download a portable JSON backup any time from Admin → Settings �
 
 ## Roster and pay rounding
 
-The **Roster** tab is the weekly staff × day grid (Cafe, Bakery, Training, Delivery, Bake, Bakery YC, Off). Tap a day to add shifts (type `9.30` + AM/PM, or `17:00`) or use the presets, press **Done**, then **Save roster** to store the changes. You can also copy a week forward, clear a week, or download the **Roster PDF**.
+The **Roster** tab is the weekly staff × day grid (Cafe, Bakery, Training, Delivery, Bake, Bakery YC, Off). Tap a day to add shifts (type `9.30` + AM/PM, or `17:00`) or use the presets, press **Done**, then **Save roster** to store the changes. You can also copy a week forward, clear a week, or download the **Roster PDF**. Page 1 is the roster to post up for staff, with no hours on it. The last page is an **admin-only overview** with everyone's rostered hours per day, the week total and days off.
 
 **Import old roster** copies everything from the old GJ06 roster app (or an exported JSON file). It always shows a preview first: the date range, matched staff, new staff (they get a random kiosk code, shown once), and how many already-worked shifts would be re-priced. The old app saved every day one day early (a UTC bug), so the import moves dates **+1 day** by default; you can change that in the preview. Re-running the import is safe — it remembers which old staff member is which employee and changes nothing that is already the same.
 
@@ -57,7 +57,8 @@ When **Rounding starts** (Settings → Pay rules) is set to a Monday, paid times
 
 - Clock-in or clock-out within **±6 minutes** of the rostered time → paid from/to the rostered time.
 - Late start → rounded **up** to the next quarter hour (9:08 → 9:15). Tagged **LATE**.
-- Early start → paid from the rostered start.
+- Early start → paid from the rostered start (while still clocked in before the start, nothing is earned yet).
+- A shift that finishes at or before the rostered start → not matched to the roster; paid actual time.
 - Leaving early → rounded **down** to the quarter hour. Tagged **EARLY**.
 - Staying past the rostered finish → overtime is paid (rounded down to the quarter hour) and tagged **OT** on the Shifts page and payslip.
 - No roster that day → actual times.
@@ -66,7 +67,7 @@ Raw clock times are never changed: the Shifts page always shows actual and paid 
 
 ## Employees, payslips and reminders
 
-Employees can be paid **hourly** (Rate 1 for the first N hours a week, Rate 2 after) or a **fixed weekly salary**. Each can have an email, phone, birthday, start date and **fixed weekly allowances/deductions** that apply automatically every week they are paid. The dashboard shows birthdays and work anniversaries coming up in the next 7 days.
+Employees can be paid **hourly** (Rate 1 for the first N hours a week, Rate 2 after), a **fixed rate** (one rate for every hour) or a **fixed weekly salary**. Each can have an email, phone, birthday, start date and **fixed weekly allowances/deductions** that apply automatically every week they are paid. The dashboard shows birthdays and work anniversaries coming up in the next 7 days.
 
 **Emailing payslips** uses [Brevo](https://www.brevo.com) (free plan ≈300 emails/day), because Railway's Hobby plan blocks normal email (SMTP):
 

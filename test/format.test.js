@@ -30,6 +30,8 @@ test('safeText guards formulas but leaves numbers', () => {
   assert.equal(F.safeText('@x'), "'@x");
   assert.equal(F.safeText('+1 call'), "'+1 call");
   assert.equal(F.safeText('Bob'), 'Bob');
+  for(const n of ['-3.5', '12.50']) assert.equal(F.safeText(n), n);
+  for(const bad of ['-1+A1', "-2-cmd|' /C calc'!A0", '\t=1+1', '\r=1+1']) assert.equal(F.safeText(bad), "'" + bad);
 });
 
 test('csvBuild quotes, escapes and adds BOM', () => {
