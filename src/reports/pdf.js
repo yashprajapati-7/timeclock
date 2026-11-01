@@ -1,6 +1,7 @@
 // PDF exports with pdfkit. Tables are drawn with plain text + rules (pdfkit's newer doc.table is undocumented in the package).
 import PDFDocument from 'pdfkit';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { HttpError } from '../errors.js';
 import { DAYS, fmtHM, fmtMin, hm, money, rosterLabel, ymd } from '../shared/format.js';
 export { rosterLabel };
@@ -166,11 +167,21 @@ export function payslipsPdf(report, empIds = 'all', opts = {}){
   return finish(doc);
 }
 
-// ----- Roster week (A4 landscape grid, colour-coded like the old roster app) -----
-const ROSTER_COLORS = {
-  CAFE: ['#EFF8F3', '#1A5C36'], BAKERY: ['#FCE7F3', '#9D174D'], 'BAKERY YC': ['#FCE7F3', '#9D174D'],
-  TRAINING: ['#EDE9FE', '#5B21B6'], DELIVERY: ['#FFF3E0', '#B45309'], BAKE: ['#FEF9EE', '#92400E'], OFF: ['#E8E8E8', '#555555'],
-};
+// ----- Roster week: page 1 copies the old GJ06 roster app's PDF (jsPDF, mm units), page 2 is the admin overview -----
+const LOGO = fileURLToPath(new URL('./gj06-logo.jpg', import.meta.url));
+const SANS = require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf');
+const SANS_BOLD = require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf');
+const GJ06_DAYS = ['MON', 'TUE', 'WED', 'THUR', 'FRI', 'SAT', 'SUNDAY'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const t12 = hhmm => { const [h, m] = hhmm.split(':').map(Number); return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}${h < 12 ? 'A' : 'P'}`; };
+export function gj06Label(e){
+  const span = e.start ? `${t12(e.start)}–${t12(e.end)}` : '';
+  return { CAFE: span, BAKERY: `Bakery ${span}`, TRAINING: `Training ${span}`, DELIVERY: 'Delivery', BAKE: 'Bake', 'BAKERY YC': 'Bakery YC', OFF: 'Off' }[e.type] ?? e.type;
+}
+const dmy = d => `${d.slice(8)}/${d.slice(5, 7)}/${d.slice(2, 4)}`;
+export const gj06WeekTitle = (from, to) => `WEEK ${dmy(from)} - ${dmy(to)}`;
+export const gj06DayHead = (day, i) => [GJ06_DAYS[i], `${Number(day.slice(8))} ${MONTHS[Number(day.slice(5, 7)) - 1]}`];
+export const rosterFileName = (from, to) => `GJ06_Roster_${gj06WeekTitle(from, to).replace(/\s/g, '_').replace(/\//g, '-')}.pdf`;
 
 // Admin-only overview page: rostered hours per day, week total and days off for each staff member.
 const hrs = h => h ? h.toFixed(1) : '–';
@@ -181,50 +192,64 @@ export function rosterOverviewRows(model){
   ];
 }
 
-// The roster page is for posting up, so it shows no hours; everyone's hours are on the overview page after it.
+// Page 1 is posted up for staff, so it shows no hours; everyone's hours are on the overview page after it.
 export function rosterPdf(model, opts = {}){
   const doc = newDoc(`Roster ${model.weekStart}`, { ...opts, layout: 'landscape' });
-  header(doc, { ...model, weekStart: model.weekStart, weekEnd: model.weekEnd }, 'Roster');
-  const x0 = doc.page.margins.left, nameW = 110;
-  const dayW = (doc.page.width - x0 * 2 - nameW) / 7, headH = 22, bottom = () => doc.page.height - doc.page.margins.bottom;
-  const drawHead = y => {
-    doc.rect(x0, y, nameW + dayW * 7, headH).fill('#000');
-    doc.font('Mono-Bold').fontSize(8).fillColor('#fff').text('STAFF', x0 + 4, y + 7, { width: nameW - 8, lineBreak: false });
-    model.days.forEach((dd, i) => doc.text(`${DAYS[i]} ${dd.slice(8)}/${dd.slice(5, 7)}`, x0 + nameW + dayW * i, y + 7, { width: dayW, align: 'center', lineBreak: false }));
-    doc.fillColor('#000');
-    return y + headH;
+  doc.registerFont('Sans', SANS);
+  doc.registerFont('Sans-Bold', SANS_BOLD);
+  const mm = v => v * 72 / 25.4;
+  // jsPDF places text by its baseline; pdfkit by the top of the line box.
+  const say = (str, x, baseline, size, { bold = true, align = 'left', w = 0, color = '#000' } = {}) => {
+    doc.font(bold ? 'Sans-Bold' : 'Sans').fontSize(size).fillColor(color);
+    const top = baseline - size * 0.76;
+    if(align === 'center') doc.text(str, x - w / 2, top, { width: w, align: 'center', lineBreak: false });
+    else doc.text(str, x, top, { lineBreak: false });
   };
-  let y = drawHead(doc.y);
-  for(const r of model.rows){
-    const lines = Math.max(1, ...r.cells.map(c => c.length));
-    const rowH = 8 + lines * 11;
-    if(y + rowH > bottom()){ doc.addPage(); y = drawHead(doc.page.margins.top); }
-    doc.font('Mono-Bold').fontSize(8).fillColor('#000').text(r.name, x0 + 4, y + 5, { width: nameW - 8, lineBreak: false, ellipsis: true });
-    r.cells.forEach((entries, i) => {
-      const cx = x0 + nameW + dayW * i;
-      entries.forEach((e, j) => {
-        const [bg, fg] = ROSTER_COLORS[e.type] ?? ['#F5F5F5', '#333333'];
-        const ey = y + 3 + j * 11;
-        doc.rect(cx + 2, ey, dayW - 4, 10).fill(bg);
-        doc.save().rect(cx + 2, ey, dayW - 4, 10).clip();
-        doc.font('Mono-Bold').fontSize(7).fillColor(fg).text(rosterLabel(e), cx + 3, ey + 2, { width: dayW - 6, align: 'center', lineBreak: false });
-        doc.restore();
-      });
+  const pW = mm(297), pH = mm(210), mL = mm(8), mT = mm(8), uW = pW - mL * 2;
+  const margin = doc.page.margins.bottom;
+  doc.page.margins.bottom = 0;      // the grid runs to 9 mm from the edge; stop pdfkit adding a page for the last row
+  try{ doc.image(LOGO, mL, mT, { width: mm(22), height: mm(15) }); }catch{ /* no logo: layout stays the same */ }
+  doc.lineWidth(mm(0.5)).strokeColor('#000');
+  const hx = pW / 2 - mm(25), hy = mT;
+  doc.rect(hx, hy, mm(50), mm(8)).stroke();
+  say('Roaster for;', pW / 2, hy + mm(5.5), 10, { align: 'center', w: mm(50) });
+  doc.rect(pW / 2 - mm(38), hy + mm(10), mm(76), mm(8)).stroke();
+  say(gj06WeekTitle(model.weekStart, model.weekEnd), pW / 2, hy + mm(15.5), 9, { align: 'center', w: mm(76) });
+
+  const rows = model.rows, tT = mT + mm(22), nW = mm(22), dW = (uW - nW) / 7;
+  const rH = (pH - tT - mm(9)) / (rows.length + 1);     // 9 mm at the bottom leaves room for the page number
+  const colLines = (y, h) => { doc.moveTo(mL + nW, y).lineTo(mL + nW, y + h); for(let i = 1; i < 7; i++) doc.moveTo(mL + nW + i * dW, y).lineTo(mL + nW + i * dW, y + h); };
+  doc.rect(mL, tT, uW, rH).fill('#000');
+  say('NAME', mL + mm(2), tT + rH * 0.65, 7, { color: '#fff' });
+  model.days.forEach((day, i) => {
+    const [name, date] = gj06DayHead(day, i), cx = mL + nW + i * dW + dW / 2;
+    say(name, cx, tT + rH * 0.38, 7, { align: 'center', w: dW, color: '#fff' });
+    say(date, cx, tT + rH * 0.76, 5.5, { bold: false, align: 'center', w: dW, color: '#fff' });
+  });
+  doc.lineWidth(mm(0.4)).strokeColor('#000').rect(mL, tT, uW, rH).stroke();
+  colLines(tT, rH); doc.stroke();
+  rows.forEach((r, ri) => {
+    const ry = tT + rH * (ri + 1);
+    if(ri % 2 === 0) doc.rect(mL, ry, uW, rH).fill('#FAFAFA');
+    say(r.name.toUpperCase(), mL + mm(2), ry + rH * 0.65, 7);
+    r.cells.forEach((entries, ci) => {
+      const cx = mL + nW + ci * dW + dW / 2, lh = mm(3.4);
+      entries.forEach((e, si) => say(gj06Label(e), cx, ry + rH * 0.5 + (si - (entries.length - 1) / 2) * lh,
+        e.type === 'TRAINING' ? 4.5 : 5.5, { bold: ['CAFE', 'BAKERY'].includes(e.type), align: 'center', w: dW }));
     });
-    doc.moveTo(x0, y + rowH).lineTo(x0 + nameW + dayW * 7, y + rowH).lineWidth(0.4).strokeColor('#000').stroke();
-    y += rowH;
-  }
-  if(y + 16 > bottom()){ doc.addPage(); y = doc.page.margins.top; }
-  doc.font('Mono-Bold').fontSize(8).fillColor('#000').text('STAFF ON', x0 + 4, y + 5, { width: nameW, lineBreak: false });
-  model.staffPerDay.forEach((n, i) => doc.text(String(n), x0 + nameW + dayW * i, y + 5, { width: dayW, align: 'center', lineBreak: false }));
+    doc.lineWidth(mm(0.2)).strokeColor('#B4B4B4').rect(mL, ry, uW, rH).stroke();
+    colLines(ry, rH); doc.stroke();
+  });
+  doc.lineWidth(mm(0.6)).strokeColor('#000').rect(mL, tT, uW, rH * (rows.length + 1)).stroke();
+  doc.page.margins.bottom = margin;
 
   doc.addPage();
   header(doc, model, 'Roster overview', 'admin only');
-  const ovDayW = 64, rows = rosterOverviewRows(model);
+  const ovDayW = 64, overview = rosterOverviewRows(model);
   table(doc, [
     { label: 'Staff', width: 192 }, ...model.days.map((dd, i) => ({ label: `${DAYS[i]} ${dd.slice(8)}/${dd.slice(5, 7)}`, width: ovDayW, align: 'right' })),
     { label: 'Total hrs', width: 70, align: 'right' }, { label: 'Days off', width: 60, align: 'right' },
-  ], rows, { fontSize: 9, bold: new Set([rows.length - 1]) });
+  ], overview, { fontSize: 9, bold: new Set([overview.length - 1]) });
   doc.font('Mono').fontSize(8).fillColor('#555')
     .text('Hours are rostered hours after the unpaid-break rules, not clocked hours.', doc.page.margins.left, doc.y);
   return finish(doc);

@@ -307,6 +307,15 @@ html{-webkit-text-size-adjust:100%}
   body{font-size:11px}
   th,td{padding:4px}
 }
+.tpair{display:flex;gap:6px;align-items:stretch}
+.tpair input[inputmode]{flex:1;min-width:0}
+.ampm{display:flex;flex:none}
+.ampm label{margin:0;cursor:pointer}
+.ampm input{position:absolute;opacity:0;width:1px;height:1px}
+.ampm span{display:flex;align-items:center;height:100%;padding:0 12px;border:2px solid var(--ink);font-weight:700;font-size:14px;background:var(--paper);color:var(--ink)}
+.ampm label+label span{border-left:0}
+.ampm input:checked+span{background:var(--accent,var(--ink));border-color:var(--accent,var(--ink));color:#fff}
+.ampm input:focus-visible+span{outline:3px dashed var(--ink);outline-offset:2px}
 </style>
 </head>
 <body>

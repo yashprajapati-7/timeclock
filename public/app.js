@@ -399,6 +399,12 @@ function sortRows(rows){
 }
 const weekParam = () => `week=${ymd(ui.weekStart)}`;
 
+// Roster time box with AM / PM right next to it; inputmode="decimal" opens the number pad (with ".") on phones.
+const timeWithAmPm = (id, name, label, placeholder, ampm) => html`<div><label for="${id}">${label}</label><div class="tpair">
+  <input id="${id}" name="${name}" placeholder="${placeholder}" inputmode="decimal" autocomplete="off" required>
+  <span class="ampm" role="radiogroup" aria-label="${label} AM or PM">${['AM', 'PM'].map(m => html`<label><input type="radio" name="${name}M" value="${m}" ${m === ampm ? 'checked' : ''}><span>${m}</span></label>`)}</span>
+</div></div>`;
+const ampmOf = name => $(`input[name="${name}M"]:checked`)?.value;
 const chipType = t => t === 'BAKERY YC' ? 'BKYC' : t;
 // Save one roster day; asks first when the change re-prices shifts that were already worked.
 // Roster edits are kept as drafts (ui.rosterDraft, "day|empId" → entries) until "Save roster".
@@ -766,10 +772,8 @@ const Dialogs = {
       <form data-submit="rosterAdd">
         <div class="grid">
           <div><label for="rType">Shift</label><select id="rType" name="type"><option value="CAFE">Cafe</option><option value="BAKERY">Bakery</option><option value="TRAINING">Training</option></select></div>
-          <div><label for="rStart">Start</label><input id="rStart" name="start" placeholder="9.30" autocomplete="off" required></div>
-          <div><label for="rSm">Start AM/PM</label><select id="rSm" name="startM"><option>AM</option><option>PM</option></select></div>
-          <div><label for="rEnd">Finish</label><input id="rEnd" name="end" placeholder="5" autocomplete="off" required></div>
-          <div><label for="rEm">Finish AM/PM</label><select id="rEm" name="endM"><option>AM</option><option selected>PM</option></select></div>
+          ${timeWithAmPm('rStart', 'start', 'Start', '9.30', 'AM')}
+          ${timeWithAmPm('rEnd', 'end', 'Finish', '5', 'PM')}
         </div>
         <div class="row"><button type="submit">+ Add shift</button><button type="button" data-act="rosterClearCell">Clear day</button></div>
       </form>
@@ -931,7 +935,7 @@ const Actions = {
     const st = $('#rStart')?.value.trim(), en = $('#rEnd')?.value.trim(), entries = [...ui.rosterEdit.entries];
     if(st || en){
       const time = (v, m) => parseShortTime(v, m) ?? parseShortTime(v);
-      const start = time(st, $('#rSm').value), end = time(en, $('#rEm').value);
+      const start = time(st, ampmOf('start')), end = time(en, ampmOf('end'));
       if(!start || !end) return Toast.show('Enter times like 9.30 or 17:00', {ms:2500});
       entries.push({ type: $('#rType').value, start, end });
     }

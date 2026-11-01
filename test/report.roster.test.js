@@ -111,6 +111,19 @@ test('roster PDF: staff page has no hours; a separate admin overview page lists 
   assert.equal(pdf.match(/\/Type \/Page\b(?!s)/g).length, 2);
 });
 
+test('roster PDF uses the GJ06 layout: week title, day headings and cell text like the old app', async () => {
+  const { gj06Label, gj06WeekTitle, gj06DayHead, rosterFileName } = await import('../src/reports/pdf.js');
+  assert.equal(gj06Label({ type: 'CAFE', start: '09:30', end: '16:30' }), '9:30A–4:30P');
+  assert.equal(gj06Label({ type: 'BAKERY', start: '07:00', end: '12:00' }), 'Bakery 7A–12P');
+  assert.equal(gj06Label({ type: 'TRAINING', start: '10:00', end: '14:00' }), 'Training 10A–2P');
+  assert.equal(gj06Label({ type: 'OFF' }), 'Off');
+  assert.equal(gj06Label({ type: 'BAKERY YC' }), 'Bakery YC');
+  assert.equal(gj06Label({ type: 'DELIVERY' }), 'Delivery');
+  assert.equal(gj06WeekTitle('2026-11-02', '2026-11-08'), 'WEEK 02/11/26 - 08/11/26');
+  assert.deepEqual(['2026-11-02', '2026-11-05', '2026-11-08'].map((d, i) => gj06DayHead(d, [0, 3, 6][i])), [['MON', '2 Nov'], ['THUR', '5 Nov'], ['SUNDAY', '8 Nov']]);
+  assert.equal(rosterFileName('2026-11-02', '2026-11-08'), 'GJ06_Roster_WEEK_02-11-26_-_08-11-26.pdf');
+});
+
 test('payslip timesheet lists all 7 days: worked, OFF, rostered but absent, nothing', () => {
   const db = memDb();
   R.setSettings(db, { roundFrom: '2026-10-26', breakMode: 'policy' });
