@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { loadData, listAudit, addAudit } from '../repo.js';
 import { buildWeekReport, buildRosterWeek, parseWeekParam } from '../reports/model.js';
 import { payrollWorkbook } from '../reports/xlsx.js';
-import { payrollPdf, payslipsPdf, rosterPdf, rosterFileName } from '../reports/pdf.js';
+import { payrollPdf, payslipsPdf, rosterPdf, rosterHoursPdf, rosterFileName } from '../reports/pdf.js';
 import { csvBuild, ymd } from '../shared/format.js';
 
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -45,6 +45,13 @@ export function exportRoutes({ db, clock }){
     const buf = await rosterPdf(model);
     audit('Export roster pdf', model.weekStart);
     send(res, 'application/pdf', rosterFileName(model.weekStart, model.weekEnd), buf);
+  });
+
+  r.get('/roster-hours.pdf', async (req, res) => {
+    const now = clock(), model = buildRosterWeek(loadData(db), parseWeekParam(req.query.week, now), now);
+    const buf = await rosterHoursPdf(model);
+    audit('Export roster hours pdf', model.weekStart);
+    send(res, 'application/pdf', `Roster_hours_${model.weekStart}.pdf`, buf);
   });
 
   r.get('/audit.csv', (req, res) => {

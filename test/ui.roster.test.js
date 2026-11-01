@@ -18,7 +18,7 @@ test('admin shell: Roster tab, colour classes, kiosk stays plain', () => {
 
 test('roster page: grid, cell editor, copy/clear/pdf/import', () => {
   for(const s of ['class="roster-grid"', 'data-act="rosterCell"', 'data-submit="rosterAdd"', 'data-act="rosterPreset"',
-    '/api/admin/roster/copy-week', '/api/admin/roster/clear-week', '/api/admin/roster/import', '/api/admin/export/roster.pdf', 'parseShortTime'])
+    '/api/admin/roster/copy-week', 'rosterCopyEmp', '/api/admin/export/roster-hours.pdf', '/api/admin/roster/clear-week', '/api/admin/roster/import', '/api/admin/export/roster.pdf', 'parseShortTime'])
     has(s);
   assert.match(css, /\.roster-grid[^{]*\{[^}]*border-collapse:separate/);
   assert.match(css, /\.roster-grid [^{]*\.rname[^{]*\{[^}]*position:sticky/);

@@ -77,16 +77,22 @@ export function rosterRoutes({ db, clock, undo, fetch: fetchImpl = globalThis.fe
   };
 
   // Copy every filled cell of `week` onto the same weekday next week (empty source cells leave targets alone).
+  // empIds (optional) limits the copy to those employees ("Copy employee").
   r.post('/copy-week', (req, res) => {
-    const days = weekDays(req.body?.week);
-    const cells = Object.entries(R.listRoster(db, { from: days[0], to: days[6] }));
+    const days = weekDays(req.body?.week), empIds = req.body?.empIds;
+    let names = null;
+    if(empIds !== undefined){
+      if(!Array.isArray(empIds) || !empIds.length) throw new ValidationError('Choose at least one employee');
+      names = empIds.map(id => { const e = R.getEmployee(db, String(id)); if(!e) throw new HttpError(404, 'Employee not found'); return e.name; });
+    }
+    const cells = Object.entries(R.listRoster(db, { from: days[0], to: days[6] })).filter(([key]) => !names || empIds.includes(key.slice(11)));
     const targets = days.map(dd => addDaysYmd(dd, 7));
-    res.json(apply(req, 'Copy roster week', targets, touch => {
+    res.json(apply(req, names ? 'Copy employee roster' : 'Copy roster week', targets, touch => {
       for(const [key, entries] of cells){
         const [day, empId] = [key.slice(0, 10), key.slice(11)];
         replaceCell(touch, empId, addDaysYmd(day, 7), entries.map(({ type, start, end }) => ({ type, start, end })));
       }
-      return { detail: `${cells.length} cells from week of ${days[0]} → ${targets[0]}`, extra: { copied: cells.length } };
+      return { detail: `${names ? names.join(', ') + ': ' : ''}${cells.length} cells from week of ${days[0]} → ${targets[0]}`, extra: { copied: cells.length } };
     }));
   });
 

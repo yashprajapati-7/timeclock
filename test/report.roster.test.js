@@ -93,8 +93,8 @@ test('roster PDF: cell labels like the old app, valid PDF, route 200/400/401', a
   assert.equal((await ag.get('/api/admin/export/roster.pdf?week=bad')).status, 400);
 });
 
-test('roster PDF: staff page has no hours; a separate admin overview page lists everyone\'s hours', async () => {
-  const { rosterPdf, rosterOverviewRows } = await import('../src/reports/pdf.js');
+test('roster PDF is one page for staff (no hours); the hours overview is a separate admin-only PDF', async () => {
+  const { rosterPdf, rosterHoursPdf, rosterOverviewRows } = await import('../src/reports/pdf.js');
   const { buildRosterWeek } = await import('../src/reports/model.js');
   const db = memDb();
   R.createEmployee(db, { id: 'a', name: 'Aka', pin: '1111', active: true }, 0);
@@ -108,7 +108,17 @@ test('roster PDF: staff page has no hours; a separate admin overview page lists 
   assert.deepEqual(rows[1], ['Bea', '3.8', '–', '–', '–', '–', '–', '–', '3.8', '0']);
   assert.deepEqual(rows.at(-1), ['TOTAL', '3.8', '7.0', '–', '–', '–', '–', '–', '10.8', '']);
   const pdf = (await rosterPdf(model, { compress: false })).toString('latin1');
-  assert.equal(pdf.match(/\/Type \/Page\b(?!s)/g).length, 2);
+  assert.equal(pdf.match(/\/Type \/Page\b(?!s)/g).length, 1);
+  const hours = (await rosterHoursPdf(model, { compress: false })).toString('latin1');
+  assert.equal(hours.match(/\/Type \/Page\b(?!s)/g).length, 1);
+  const { makeTestApp, loginAgent, binary } = await import('./helpers.js');
+  const { default: request } = await import('supertest');
+  const { app } = await makeTestApp();
+  assert.equal((await request(app).get('/api/admin/export/roster-hours.pdf')).status, 401);
+  const ok = await (await loginAgent(app)).get('/api/admin/export/roster-hours.pdf?week=2026-10-26').buffer(true).parse(binary);
+  assert.equal(ok.status, 200);
+  assert.equal(ok.headers['content-type'], 'application/pdf');
+  assert.match(ok.headers['content-disposition'], /Roster_hours_2026-10-26\.pdf/);
 });
 
 test('roster PDF uses the GJ06 layout: week title, day headings and cell text like the old app', async () => {

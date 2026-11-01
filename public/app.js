@@ -540,7 +540,9 @@ const Views = {
       <div class="row noprint actions-grid">
         ${changes ? html`<button class="inv save-roster" data-act="rosterSaveAll">Save roster (${changes})</button><button data-act="rosterDiscard">Discard</button>` : ''}
         <button class="inv" data-act="rosterCopy">Copy to next week</button>
+        <button class="inv" data-act="rosterCopyEmp">Copy employee</button>
         <button data-act="rosterPdf">Roster PDF</button>
+        <button data-act="rosterHoursPdf">Hours PDF</button>
         <button data-act="rosterImport">Import old roster</button>
         <button data-act="rosterClear">Clear week</button>
       </div>
@@ -826,6 +828,17 @@ const Dialogs = {
         <div class="row"><button class="inv" type="submit">Add</button><button type="button" data-act="modalCancel">Done</button></div>
       </form>`);
   },
+  // Pick employees whose shifts this week are copied onto next week.
+  rosterCopyEmp(){
+    const s = db(), wk = ymd(ui.weekStart), days = [0, 1, 2, 3, 4, 5, 6].map(i => ymd(addDays(ui.weekStart, i)));
+    const staff = s.employees.filter(e => days.some(d => (s.roster[`${d}|${e.id}`] || []).length)).sort((a, b) => a.name.localeCompare(b.name));
+    if(draftKeys().length) return Toast.show('Save or discard your roster changes first', {ms:2500});
+    if(!staff.length) return Toast.show('Nobody is rostered this week', {ms:2000});
+    Modal.open(html`<form data-submit="rosterCopyEmp" data-week="${wk}"><h2 id="modalTitle">Copy employee to next week</h2>
+      <p style="margin-top:0">Copies their shifts from this week onto the week of ${fmtDay(addDays(ui.weekStart, 7))}.</p>
+      <div class="checklist">${staff.map(e => html`<label class="check"><input type="checkbox" name="emp" value="${e.id}"> ${e.name}</label>`)}</div>
+      <div class="row"><button class="inv" type="submit">Copy</button><button type="button" data-act="modalCancel">Cancel</button></div></form>`);
+  },
   payRecord(empId){
     const s = db(), e = empById(empId); if(!e) return;
     const r = Pay.week(s, ui.weekStart).find(x => x.e.id === empId);
@@ -952,6 +965,8 @@ const Actions = {
     if(await RemoteStore.call('put', '/api/admin/settings', { rounding: true, roundFrom: from })) Toast.show('Late check is on', {ms:2000});
   },
   rosterPdf: () => downloadFile(`/api/admin/export/roster.pdf?${weekParam()}`),
+  rosterHoursPdf: () => downloadFile(`/api/admin/export/roster-hours.pdf?${weekParam()}`),
+  rosterCopyEmp: () => Dialogs.rosterCopyEmp(),
   rosterCopy: async () => {
     const week = ymd(ui.weekStart);
     const dry = await api.post('/api/admin/roster/copy-week', { week, dryRun: true }).catch(() => ({ repriced: 0 }));
@@ -1171,6 +1186,12 @@ const Forms = {
     if(amount <= 0) return Toast.show('Enter an amount', {ms:1800});
     const body = { week: ymd(ui.weekStart), empId, type: fd.get('type'), label: String(fd.get('label')).trim(), amount };
     if(await RemoteStore.call('post', '/api/admin/adjustments', body)) Dialogs.adjust(empId);
+  },
+  rosterCopyEmp: async (fd, form) => {
+    const empIds = fd.getAll('emp');
+    if(!empIds.length) return Toast.show('Tick at least one employee', {ms:2000});
+    const r = await RemoteStore.call('post', '/api/admin/roster/copy-week', { week: form.dataset.week, empIds });
+    if(r){ Modal.close(true); undoToast(`${empIds.length} employee${empIds.length === 1 ? '' : 's'} copied to next week`); }
   },
   payAdd: async (fd, form) => {
     const amount = num(fd.get('amount'));

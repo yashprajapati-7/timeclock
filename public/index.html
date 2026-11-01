@@ -316,6 +316,10 @@ html{-webkit-text-size-adjust:100%}
 .ampm label+label span{border-left:0}
 .ampm input:checked+span{background:var(--accent,var(--ink));border-color:var(--accent,var(--ink));color:#fff}
 .ampm input:focus-visible+span{outline:3px dashed var(--ink);outline-offset:2px}
+.checklist{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin:8px 0 14px;max-height:50vh;overflow:auto}
+.check{display:flex;align-items:center;gap:8px;margin:0;padding:10px;border:2px solid var(--ink);font-weight:700;text-transform:none;letter-spacing:0;cursor:pointer}
+.check input{width:20px;height:20px;margin:0;flex:none}
+.check:has(input:checked){background:var(--ink);color:var(--paper)}
 </style>
 </head>
 <body>

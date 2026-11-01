@@ -144,3 +144,23 @@ test('502 when the old roster app is unreachable, errors, or sends too much', as
     assert.match(r.body.error, /old roster app|too large/);
   }
 });
+
+test('copy-week with empIds copies only the chosen employees to next week (undoable)', async () => {
+  const { a, emp, state, put } = await setup();
+  const bea = (await a.post('/api/admin/employees').send({ name: 'Bea', pin: '2222', rate1: 20 })).body.id;
+  await put('2026-10-26', CAFE);
+  await put('2026-10-28', [{ type: 'OFF' }]);
+  await a.put(`/api/admin/roster/${bea}/2026-10-27`).send({ entries: CAFE });
+  const c = await a.post('/api/admin/roster/copy-week').send({ week: '2026-10-26', empIds: [emp] });
+  assert.equal(c.status, 200);
+  assert.equal(c.body.copied, 2);
+  let r = (await state()).roster;
+  assert.equal(r[`2026-11-02|${emp}`][0].type, 'CAFE');
+  assert.equal(r[`2026-11-04|${emp}`][0].type, 'OFF');
+  assert.equal(r[`2026-11-03|${bea}`], undefined);
+  assert.match((await a.get('/api/admin/audit?q=copy')).body[0].detail, /Aka/);
+  await a.post('/api/admin/undo').type('json');
+  assert.equal((await state()).roster[`2026-11-02|${emp}`], undefined);
+  assert.equal((await a.post('/api/admin/roster/copy-week').send({ week: '2026-10-26', empIds: [] })).status, 422);
+  assert.equal((await a.post('/api/admin/roster/copy-week').send({ week: '2026-10-26', empIds: ['nobody'] })).status, 404);
+});

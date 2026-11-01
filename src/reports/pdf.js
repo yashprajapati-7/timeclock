@@ -192,7 +192,7 @@ export function rosterOverviewRows(model){
   ];
 }
 
-// Page 1 is posted up for staff, so it shows no hours; everyone's hours are on the overview page after it.
+// The roster PDF is sent to staff, so it is one page with no hours (hours: rosterHoursPdf).
 export function rosterPdf(model, opts = {}){
   const doc = newDoc(`Roster ${model.weekStart}`, { ...opts, layout: 'landscape' });
   doc.registerFont('Sans', SANS);
@@ -242,9 +242,13 @@ export function rosterPdf(model, opts = {}){
   });
   doc.lineWidth(mm(0.6)).strokeColor('#000').rect(mL, tT, uW, rH * (rows.length + 1)).stroke();
   doc.page.margins.bottom = margin;
+  return finish(doc);
+}
 
-  doc.addPage();
-  header(doc, model, 'Roster overview', 'admin only');
+// Admin-only hours overview: a separate download, so the roster PDF can be sent to staff as it is.
+export function rosterHoursPdf(model, opts = {}){
+  const doc = newDoc(`Roster hours ${model.weekStart}`, { ...opts, layout: 'landscape' });
+  header(doc, model, 'Roster hours', 'admin only');
   const ovDayW = 64, overview = rosterOverviewRows(model);
   table(doc, [
     { label: 'Staff', width: 192 }, ...model.days.map((dd, i) => ({ label: `${DAYS[i]} ${dd.slice(8)}/${dd.slice(5, 7)}`, width: ovDayW, align: 'right' })),
